@@ -1,0 +1,38 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Project artifacts (regenerate locally)
+models/**/checkpoints/
+external/trainedoutput/
+external/training_progress.json
+
+# Large local datasets (keep samples in data/ if needed)
+Lateral-Movement-Dataset--LMD_Collections/
+*.zip
+
+# Streamlit
+.streamlit/secrets.toml

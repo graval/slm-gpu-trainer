@@ -1,0 +1,3 @@
+# Optional: 4-bit QLoRA (Linux + NVIDIA CUDA only; not supported on Windows)
+-r requirements.txt
+bitsandbytes>=0.43.0

@@ -1,0 +1,22 @@
+services:
+  slm-trainer-gpu:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+        REQUIREMENTS_FILE: requirements-docker-gpu.txt
+    image: gauravraval/slm-trainer:gpu
+    container_name: slm-trainer-gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${EXTERNAL_DATA_DIR:-../external}:/app/external
+    environment:
+      - FORCE_CUDA=true
+    command: ["classifier", "--epochs", "3", "--batch_size", "8"]

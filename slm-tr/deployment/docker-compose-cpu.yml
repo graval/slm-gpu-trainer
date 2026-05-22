@@ -1,0 +1,21 @@
+services:
+  slm-trainer-cpu:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: pytorch/pytorch:2.11.0-cpu
+        REQUIREMENTS_FILE: requirements-docker.txt
+    image: slm-trainer:cpu
+    container_name: slm-trainer-cpu
+    volumes:
+      # Map the host directory containing 'lmd_2023_dataset.csv' to /app/external
+      # The trained model weights will be saved directly into a 'trainedoutput' subfolder here.
+      # By default, maps a folder called 'external' in the parent directory.
+      # You can override this by setting the EXTERNAL_DATA_DIR environment variable.
+      - ${EXTERNAL_DATA_DIR:-../external}:/app/external
+    # Default command is 'classifier'. Change to 'generator' to run Qwen fine-tuning.
+    # Note: On CPU, training the classifier will downsample to a small subset automatically,
+    # and running the generator is highly discouraged due to long CPU computing times.
+    command: ["classifier", "--epochs", "3", "--batch_size", "8"]
+

@@ -1,0 +1,2 @@
+-r requirements-docker.txt
+bitsandbytes>=0.43.0
