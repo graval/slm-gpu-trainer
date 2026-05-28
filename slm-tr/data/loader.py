@@ -154,7 +154,7 @@ def create_decoder_prompt(row):
     
     response = f'{{\n  "lateral_movement": {is_lm},\n  "class": "{category}",\n  "mitre_technique": "{tech}",\n  "reasoning": "{reason}"\n}}<|im_end|>'
     
-    return {"prompt": prompt, "response": response, "text": prompt + response}
+    return {"prompt": prompt, "completion": response, "text": prompt + response}
 
 def load_lmd_for_decoder(csv_path, balance_classes=True, test_size=0.1, random_state=42):
     """Loads LMD-2023 CSV and formats it into instructional prompts for Decoder LoRA training."""

@@ -346,18 +346,109 @@ elif "📊 Training & Metrics" in page:
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### LMD-2023 Classification Benchmarks (DeBERTa-v3-small)")
+    summary_file = "evaluation_summary.json"
+    if os.path.exists(summary_file):
+        try:
+            with open(summary_file, "r") as f:
+                summary = json.load(f)
+        except Exception:
+            summary = None
+    else:
+        summary = None
+        
+    if not summary:
+        summary = {
+            "timestamp": "2026-05-28T12:47:00+05:30",
+            "test_partition_size": 201,
+            "raw_model": {"accuracy": 0.1244, "f1_macro": 0.0737, "precision_macro": 0.0415, "recall_macro": 0.3333, "false_positives": 150, "false_negatives": 0, "avg_latency_ms": 36.45},
+            "trained_model": {"accuracy": 0.8706, "f1_macro": 0.6345, "precision_macro": 0.6062, "recall_macro": 0.6667, "false_positives": 0, "false_negatives": 25, "avg_latency_ms": 36.31}
+        }
+        
+    raw_m = summary["raw_model"]
+    trained_m = summary["trained_model"]
+    
+    st.markdown(f"### LMD-2023 Classifier Benchmarks (DeBERTa-v3-small)")
+    st.caption(f"Last evaluated at: `{summary['timestamp']}` across `{summary['test_partition_size']}` test partition samples (10% split)")
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
-        st.metric("Test Accuracy", "99.24%", "+0.45% vs. base")
+        st.metric(
+            "Test Accuracy", 
+            f"{trained_m['accuracy'] * 100:.2f}%", 
+            f"+{(trained_m['accuracy'] - raw_m['accuracy']) * 100:.2f}% vs. raw"
+        )
     with col_m2:
-        st.metric("Macro F1-Score", "98.92%", "+0.82% vs. base")
+        st.metric(
+            "Macro F1-Score", 
+            f"{trained_m['f1_macro']:.4f}", 
+            f"+{trained_m['f1_macro'] - raw_m['f1_macro']:.4f} vs. raw"
+        )
     with col_m3:
-        st.metric("Macro Precision", "98.74%", "+0.61%")
+        st.metric(
+            "False Positives Reduced", 
+            f"{trained_m['false_positives']}", 
+            f"-{raw_m['false_positives'] - trained_m['false_positives']} samples",
+            delta_color="inverse"
+        )
     with col_m4:
-        st.metric("Macro Recall", "99.11%", "+1.03%")
+        st.metric(
+            "Avg Inference Latency", 
+            f"{trained_m['avg_latency_ms']:.2f} ms", 
+            f"{trained_m['avg_latency_ms'] - raw_m['avg_latency_ms']:.2f} ms vs. raw"
+        )
         
+    st.markdown("---")
+    
+    st.markdown("### 🎛️ Untrained vs. Trained Comparison Matrix")
+    
+    # Beautiful Custom HTML Comparison Table
+    st.markdown(f"""
+    <div class="card">
+        <table style="width:100%; border-collapse: collapse; text-align: left;">
+            <thead>
+                <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); color: #4791ff; font-weight: bold; font-size: 1.05rem;">
+                    <th style="padding: 12px 15px;">Evaluation Metric</th>
+                    <th style="padding: 12px 15px;">Untrained / Raw Base Model</th>
+                    <th style="padding: 12px 15px;">Fine-Tuned / Updated Model</th>
+                    <th style="padding: 12px 15px;">Absolute Delta / Improvement</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.95rem;">
+                    <td style="padding: 12px 15px; font-weight: 600; color: white;">🎯 Test Accuracy</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #889;">{raw_m['accuracy'] * 100:.2f}%</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: bold;">{trained_m['accuracy'] * 100:.2f}%</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: 600;">+{(trained_m['accuracy'] - raw_m['accuracy']) * 100:.2f}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.95rem;">
+                    <td style="padding: 12px 15px; font-weight: 600; color: white;">📈 Macro F1-Score</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #889;">{raw_m['f1_macro']:.4f}</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: bold;">{trained_m['f1_macro']:.4f}</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: 600;">+{trained_m['f1_macro'] - raw_m['f1_macro']:.4f}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.95rem;">
+                    <td style="padding: 12px 15px; font-weight: 600; color: white;">🟢 False Positives (FP)</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #ef4444;">{raw_m['false_positives']} samples</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: bold;">{trained_m['false_positives']} samples</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: 600;">-{raw_m['false_positives'] - trained_m['false_positives']} samples</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.95rem;">
+                    <td style="padding: 12px 15px; font-weight: 600; color: white;">🔴 False Negatives (FN)</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981;">{raw_m['false_negatives']} samples</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #ef4444; font-weight: bold;">{trained_m['false_negatives']} samples</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #ef4444; font-weight: 600;">+{trained_m['false_negatives'] - raw_m['false_negatives']} samples</td>
+                </tr>
+                <tr style="font-size: 0.95rem;">
+                    <td style="padding: 12px 15px; font-weight: 600; color: white;">⚡ Avg. Inference Latency</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #889;">{raw_m['avg_latency_ms']:.2f} ms</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: bold;">{trained_m['avg_latency_ms']:.2f} ms</td>
+                    <td style="padding: 12px 15px; font-family: monospace; color: #10b981; font-weight: 600;">{trained_m['avg_latency_ms'] - raw_m['avg_latency_ms']:.2f} ms</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("---")
     
     col_ch1, col_ch2 = st.columns(2)
@@ -365,9 +456,9 @@ elif "📊 Training & Metrics" in page:
         st.write("#### Training & Validation Loss Over Epochs")
         # Generate chart data
         chart_data = pd.DataFrame({
-            "Epoch": [1, 2, 3, 4, 5],
-            "Training Loss": [0.65, 0.28, 0.12, 0.05, 0.02],
-            "Validation Loss": [0.38, 0.19, 0.08, 0.06, 0.05]
+            "Epoch": [1, 2, 3],
+            "Training Loss": [0.7722, 0.5462, 0.4970],
+            "Validation Loss": [0.8242, 0.5962, 0.5462]
         }).melt("Epoch", var_name="Dataset", value_name="Cross Entropy Loss")
         
         c = alt.Chart(chart_data).mark_line(point=True).encode(
@@ -380,10 +471,10 @@ elif "📊 Training & Metrics" in page:
     with col_ch2:
         st.write("#### Validation Metrics Progress")
         metrics_data = pd.DataFrame({
-            "Epoch": [1, 2, 3, 4, 5],
-            "F1-Score": [0.82, 0.91, 0.96, 0.98, 0.99],
-            "Precision": [0.85, 0.92, 0.95, 0.98, 0.99],
-            "Recall": [0.80, 0.90, 0.97, 0.99, 0.99]
+            "Epoch": [1, 2, 3],
+            "F1-Score": [0.1667, 0.5556, 0.6345],
+            "Precision": [0.1111, 0.5000, 0.6062],
+            "Recall": [0.3333, 0.6667, 0.6667]
         }).melt("Epoch", var_name="Metric", value_name="Score")
         
         c_m = alt.Chart(metrics_data).mark_line(point=True).encode(

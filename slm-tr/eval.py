@@ -82,6 +82,7 @@ def main():
     print("[*] Tokenizing test dataset...")
     tokenized_test = test_dataset.map(tokenize_function, batched=True)
     tokenized_test = tokenized_test.rename_column("normalized_label", "label")
+    tokenized_test.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
     
     # 4. Load Model
     print(f"[*] Loading model parameters into memory...")

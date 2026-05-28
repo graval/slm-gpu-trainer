@@ -232,6 +232,9 @@ def main():
         args.model_name, 
         num_labels=3
     )
+    if device == "cpu":
+        print("[*] Casting model parameters to float32 for CPU compatibility...")
+        model = model.float()
     
     # Define training arguments
     training_args = TrainingArguments(

@@ -102,14 +102,47 @@ To evaluate threat logs directly via the terminal:
 
 ---
 
-## 🧪 Training Locally
-Once your dataset is active in `data/`:
-* **Train Classifier SLM:**
+## 🧪 Training & Metrics Evaluation
+
+### 1. Labeled Dataset Specifications
+To train the classifier and generator, the labeled dataset must be provided as a CSV file placed at `data/lmd_2023_dataset.csv`.
+The CSV dataset must contain at least the following standard host-security columns:
+* `Image`: Full path of the executable image (e.g. `C:\Windows\System32\cmd.exe`)
+* `CommandLine`: Command line arguments executed (e.g. `wmic /node:"target" process call create ...`)
+* `ParentImage`: Parent process executable image path
+* `ParentCommandLine`: Command line arguments of the parent process
+* `User`: Executing security context user name (e.g. `NT AUTHORITY\SYSTEM` or `DOMAIN\jdoe`)
+* `Label`: Threat classification label. Legitimate events must be labeled as `Normal` (or `0`). Lateral movement service events must be labeled as `EoRS` (or `1`). Credential harvesting and alternate token usage events must be labeled as `EoHT` (or `2`).
+
+> **Automatic Label Normalization:** The loader dynamically resolves standard threat columns and normalizes labels (`Normal` -> 0, `EoRS` -> 1, `EoHT` -> 2).
+
+### 2. Dataset Initialization & Download Scripts
+If the dataset is not present, you can run the built-in initializer script to download authentic public lateral movement telemetry and baseline benign Windows logs:
+```powershell
+# Auto-download covenant & empire attack zips and compile fallback dataset:
+.\.venv\Scripts\python scripts/setup_dataset.py
+```
+*(All large non-code datasets, raw JSON logs, and trained weights are excluded from Git repository tracking via `.gitignore`).*
+
+### 3. Model Training
+To train DeBERTa and Qwen models locally on CPU:
+* **Train DeBERTa Classifier:**
   ```powershell
-  .\.venv\Scripts\python train_classifier.py --epochs 3 --batch_size 8
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_classifier.py --epochs 3 --batch_size 8
   ```
-* **Train Generative SLM:**
+* **Train Qwen LoRA Generator:**
   ```powershell
-  .\.venv\Scripts\python train_generator.py --epochs 3 --batch_size 2
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_generator.py --epochs 1 --batch_size 1 --gradient_accumulation_steps 1
   ```
-  *(Add `--qlora` if you are running locally on a standard CUDA GPU to save memory).*
+
+### 4. Running Raw vs. Fine-Tuned Metrics Evaluation
+To run comparative metrics (accuracy, macro precision/recall/F1, False Positives, False Negatives, and inference durations) on a 10% test split:
+```powershell
+$env:PYTHONUTF8="1"; .\.venv\Scripts\python evaluate_comparison.py
+```
+This script runs inference on both the raw base model and your locally fine-tuned model and:
+1. Generates `evaluation_summary.json` (consumed dynamically by the Streamlit dashboard).
+2. Appends timestamped comparison blocks to `evaluation_summary.log` in the project root.
+
+> **💡 Best Practice:** It is highly recommended to **check in `evaluation_summary.log`** to your repository to preserve historic records of model training quality!
+

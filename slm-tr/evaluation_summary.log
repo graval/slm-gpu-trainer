@@ -1,0 +1,36 @@
+======================================================================
+TIMESTAMP: 2026-05-28T12:47:00.077513+05:30
+======================================================================
+SLM LATERAL MOVEMENT CLASSIFIER COMPARISON REPORT
+----------------------------------------------------------------------
+Test Partition Size: 201 samples
+Base Model Arch:     microsoft/deberta-v3-small
+Fine-Tuned Weight:   models/deberta-lateral-movement
+
+1. UNTRAINED / RAW MODEL METRICS:
+   - Accuracy:                  12.44%
+   - Macro F1-Score:            0.0737
+   - Macro Precision:           0.0415
+   - Macro Recall:              0.3333
+   - Total False Positives:     150 samples
+   - Total False Negatives:     0 samples
+   - Avg. Inference Latency:    36.45 ms / sample
+   - Total Evaluation Duration: 7.33 seconds
+
+2. FINE-TUNED / UPDATED MODEL METRICS:
+   - Accuracy:                  87.06%
+   - Macro F1-Score:            0.6345
+   - Macro Precision:           0.6062
+   - Macro Recall:              0.6667
+   - Total False Positives:     0 samples
+   - Total False Negatives:     25 samples
+   - Avg. Inference Latency:    36.31 ms / sample
+   - Total Evaluation Duration: 7.30 seconds
+
+3. PERFORMANCE IMPROVEMENT DELTAS:
+   - Accuracy Increase:         +74.63%
+   - F1-Score Improvement:      +0.5607
+   - False Positives Reduced:   150 samples
+   - False Negatives Reduced:   -25 samples
+======================================================================
+

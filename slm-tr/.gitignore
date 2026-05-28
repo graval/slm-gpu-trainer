@@ -29,10 +29,16 @@ Thumbs.db
 models/**/checkpoints/
 external/trainedoutput/
 external/training_progress.json
+evaluation_summary.json
+
 
 # Large local datasets (keep samples in data/ if needed)
 Lateral-Movement-Dataset--LMD_Collections/
 *.zip
+data/*.json
+data/*.csv
+external/*.csv
+models/
 
 # Streamlit
 .streamlit/secrets.toml

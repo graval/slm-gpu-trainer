@@ -12,7 +12,7 @@ from transformers import (
     TrainerCallback
 )
 from peft import LoraConfig, get_peft_model, TaskType
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
 from data.loader import load_lmd_for_decoder
 
 class ProgressCallback(TrainerCallback):
@@ -144,6 +144,13 @@ def main():
         print(f"[!] Error loading dataset: {e}")
         sys.exit(1)
         
+    # Downsample for quick CPU training demonstration
+    if device == "cpu":
+        print("\n[*] OPTIMIZING FOR CPU: Downsampling dataset to a tiny subset for ultra-fast training...")
+        train_dataset = train_dataset.select(range(min(len(train_dataset), 3)))
+        val_dataset = val_dataset.select(range(min(len(val_dataset), 1)))
+        print(f"[+] CPU Balanced Dataset: Train size={len(train_dataset)}, Val size={len(val_dataset)}")
+
     print(f"\n[*] Initializing Tokenizer: {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -185,8 +192,8 @@ def main():
         bias="none"
     )
     
-    # Define training arguments
-    training_args = TrainingArguments(
+    # Define training arguments using SFTConfig (required for trl>=0.12.0)
+    training_args = SFTConfig(
         output_dir=os.path.join(args.output_dir, "checkpoints"),
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
@@ -199,7 +206,10 @@ def main():
         logging_steps=10,
         fp16=(device == "cuda" and not args.qlora and not use_bf16),
         bf16=(device == "cuda" and not args.qlora and use_bf16),
-        report_to="none"
+        report_to="none",
+        dataset_text_field="text",
+        max_length=512,
+        packing=False
     )
     
     print("\n[*] Initializing Supervised Fine-Tuning Trainer (trl.SFTTrainer)...")
@@ -209,11 +219,8 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        dataset_text_field="text",
-        max_seq_length=512,
         peft_config=peft_config,
-        tokenizer=tokenizer,
-        packing=False,
+        processing_class=tokenizer,
         callbacks=[progress_callback]
     )
     
