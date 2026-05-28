@@ -14,6 +14,10 @@ The project features a dual-model architecture designed for high-performance cla
 2. **Generative Reasoner SLM (`Qwen/Qwen2.5-1.5B-Instruct` - 1.5B parameters):**
    * *Purpose:* Fine-tuned via Parameter-Efficient LoRA (and 4-bit QLoRA) to output structured JSON threat alerts with corresponding MITRE ATT&CK technique mapping and human-readable security reasoning.
    * *Use-case:* High-fidelity threat explainability and automated SOC analyst triage.
+3. **Generative Reasoner SLM (`microsoft/Phi-3-mini-4k-instruct` - 3.8B parameters, INT8):**
+   * *Purpose:* Fine-tuned via dynamic 8-bit quantization LoRA on Windows CPU using Hugging Face's `optimum-quanto` library to handle highly complex explainability and deep structural security mapping.
+   * *Use-case:* State-of-the-art Windows host offline threat hunter logic and contextual remediation recommendations.
+
 
 ---
 
@@ -134,6 +138,11 @@ To train DeBERTa and Qwen models locally on CPU:
   ```powershell
   $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_generator.py --epochs 1 --batch_size 1 --gradient_accumulation_steps 1
   ```
+* **Train Phi-3-mini LoRA Generator (INT8 CPU Quantized):**
+  ```powershell
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_generator.py --model_name microsoft/Phi-3-mini-4k-instruct --int8 --epochs 1 --batch_size 1 --gradient_accumulation_steps 1 --output_dir models/phi3-lateral-movement
+  ```
+
 
 ### 4. Running Raw vs. Fine-Tuned Metrics Evaluation
 To run comparative metrics (accuracy, macro precision/recall/F1, False Positives, False Negatives, and inference durations) on a 10% test split:

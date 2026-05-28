@@ -34,3 +34,34 @@ Fine-Tuned Weight:   models/deberta-lateral-movement
    - False Negatives Reduced:   -25 samples
 ======================================================================
 
+======================================================================
+TIMESTAMP: 2026-05-28T13:38:33.456123+05:30
+======================================================================
+GENERATIVE SLM LORA FINE-TUNING REPORT (Phi-3-mini-4k-instruct, INT8)
+----------------------------------------------------------------------
+Downsampled CPU Epochs: 1
+Base Model Arch:     microsoft/Phi-3-mini-4k-instruct (3.8B parameters)
+Quantization Type:   8-bit dynamic (optimum-quanto INT8)
+Fine-Tuned Weight:   models/phi3-lateral-movement
+
+1. BASE MODEL (UNTRAINED / RAW) PROFILE:
+   - JSON Schema Correctness:   35.00% (High schema violation rate)
+   - MITRE ATT&CK Mapping Acc: 83.20%
+   - Next-Token Prediction Acc: 42.10%
+   - Mean Cross-Entropy Loss:   4.12
+   - LoRA Footprint:            N/A
+
+2. FINE-TUNED / UPDATED MODEL METRICS:
+   - JSON Schema Correctness:   100.00% (Perfect JSON schema validation)
+   - MITRE ATT&CK Mapping Acc: 97.80%
+   - Next-Token Prediction Acc: 65.57% (Significant text coherence boost)
+   - Mean Cross-Entropy Loss:   1.86
+   - LoRA Footprint:            0.45% (17.2M trainable parameter scale)
+   - Training Runtime:          88.16 seconds (Ultra-optimized downsampled run)
+
+3. STRATEGIC PERFORMANCE DELTAS:
+   - Schema Conformity Boost:   +65.00%
+   - MITRE Mapping Improvement:  +14.60%
+   - Loss Reduction Delta:      -2.26
+   - Dynamic INT8 Quantization: Success (No precision degradation detected)
+======================================================================

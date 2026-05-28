@@ -110,6 +110,7 @@ def parse_args():
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4, help="Gradient accumulation steps")
     parser.add_argument("--learning_rate", type=float, default=2e-4, help="LoRA learning rate")
     parser.add_argument("--qlora", action="store_true", default=False, help="Use 4-bit QLoRA to save memory (requires bitsandbytes)")
+    parser.add_argument("--int8", action="store_true", default=False, help="Use 8-bit quantization (Quanto for CPU / BitsAndBytes for GPU)")
     return parser.parse_args()
 
 def main():
@@ -156,11 +157,19 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
     
-    # Load model with quantization if QLoRA is enabled
-    bnb_config = None
-    if args.qlora and device == "cuda":
+    # Load model with quantization if INT8 or QLoRA is enabled
+    quantization_config = None
+    if args.int8:
+        if device == "cpu":
+            print("[*] Configuring 8-bit weights quantization (INT8) using optimum/quanto on CPU...")
+            from transformers import QuantoConfig
+            quantization_config = QuantoConfig(weights="int8")
+        else:
+            print("[*] Configuring 8-bit weights quantization (INT8) using bitsandbytes on GPU...")
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+    elif args.qlora and device == "cuda":
         print("[*] Configuring 4-bit quantization (QLoRA) using bitsandbytes...")
-        bnb_config = BitsAndBytesConfig(
+        quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16,
@@ -172,9 +181,10 @@ def main():
     
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        quantization_config=bnb_config,
+        quantization_config=quantization_config,
         device_map="auto" if device == "cuda" else None,
-        torch_dtype=torch_dtype
+        torch_dtype=torch_dtype,
+        trust_remote_code=False
     )
     
     # Configure LoRA
