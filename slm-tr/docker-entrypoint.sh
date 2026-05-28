@@ -39,20 +39,19 @@ print(f'    PyTorch version: {torch.__version__}')
 print(f'    CUDA version: {torch.version.cuda}')
 print(f'    CUDA Available: {torch.cuda.is_available()}')
 if not torch.cuda.is_available():
-    print('    [!] NO CUDA GPU FOUND!')
-    sys.exit(1)
-name = torch.cuda.get_device_name(0)
-cap = torch.cuda.get_device_capability(0)
-print(f'    Device Name: {name}')
-print(f'    Compute Capability: sm_{cap[0]}{cap[1]}')
-try:
-    x = torch.randn(4, 4, device='cuda')
-    y = x @ x
-    print(f'    GPU tensor test: OK (shape={tuple(y.shape)})')
-except Exception as e:
-    print(f'    [!] GPU tensor test FAILED: {e}')
-    print('    [!] Rebuild with BASE_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime')
-    sys.exit(1)
+    print('    [!] NO CUDA GPU FOUND! Falling back to CPU execution mode...')
+else:
+    name = torch.cuda.get_device_name(0)
+    cap = torch.cuda.get_device_capability(0)
+    print(f'    Device Name: {name}')
+    print(f'    Compute Capability: sm_{cap[0]}{cap[1]}')
+    try:
+        x = torch.randn(4, 4, device='cuda')
+        y = x @ x
+        print(f'    GPU tensor test: OK (shape={tuple(y.shape)})')
+    except Exception as e:
+        print(f'    [!] GPU tensor test FAILED: {e}')
+        print('    [!] Falling back to CPU execution mode...')
 "
 
 # Default action if no argument is provided
