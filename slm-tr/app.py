@@ -409,11 +409,12 @@ elif "📊 Training & Metrics" in page:
     # Check if a live training run is in progress
     live_progress_file = "external/training_progress.json"
     live_training_active = False
+    progress_data = None
     if os.path.exists(live_progress_file):
         try:
             with open(live_progress_file, "r") as f:
-                progress = json.load(f)
-            if progress.get("status") == "training":
+                progress_data = json.load(f)
+            if progress_data.get("status") == "training":
                 live_training_active = True
         except Exception:
             pass
@@ -425,6 +426,12 @@ elif "📊 Training & Metrics" in page:
             ℹ️ **Showing Pre-Trained Baseline Results**  
             The metrics below correspond to a prior reference training run completed on **May 28, 2026**.  
             🚀 **Live training is currently in progress!** Your custom models are actively fine-tuning in the background inside the Docker container. Once training completes, this page will automatically refresh with your custom live results!
+            """)
+        elif progress_data and progress_data.get("status") == "completed":
+            st.info("""
+            ℹ️ **Showing Pre-Trained Baseline Results**  
+            The metrics below correspond to a prior reference training run completed on **May 28, 2026**.  
+            🚀 **Training is completed successfully!** Post-training comparative testing and evaluation is currently running inside the Docker container to compile your fine-tuned metrics. This takes a few minutes (especially on CPU). Once testing completes, this page will automatically refresh with your live custom results!
             """)
         else:
             st.info("""
