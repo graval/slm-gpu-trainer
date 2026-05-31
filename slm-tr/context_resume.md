@@ -4,13 +4,15 @@ This local guide captures the exact state of our pair-programming session as of 
 
 ---
 
-## 🎯 High-Level Goal achieved
+## 🎯 High-Level Goal Achieved
 
-We successfully resolved the dashboard metrics sync issue where the **SLM Training & Performance Analytics** page was locked to cached pre-trained baselines. We configured the training container to run a unified sequence (Dashboard background -> model training -> post-training comparison metrics) and to save the compiled model files inside unique host-mounted timestamped directories.
+We successfully resolved the dashboard metrics sync issue where the **SLM Training & Performance Analytics** page was locked to cached pre-trained baselines. We configured the training container to run a unified sequence (Dashboard background -> model training -> post-training comparison metrics) and to save the compiled model files inside unique host-mounted timestamped directories. 
+
+We successfully validated the entire pipeline's end-to-end telemetry and UI dynamic updates using a rapid CPU test run, which has now transitioned to a full-scale normal production run in your background.
 
 ---
 
-## 🛠️ Implemented Architectural Fixes
+## 🛠️ Implemented Architectural & UI Fixes
 
 ### 1. Missing Evaluator Copied to Container
 - **Problem**: `evaluate_comparison.py` was missing from the Docker image's `COPY` statement in the `Dockerfile`. Post-training comparative testing was failing inside the container, preventing the generation of `evaluation_summary.json`.
@@ -27,6 +29,18 @@ We successfully resolved the dashboard metrics sync issue where the **SLM Traini
 - **Problem**: Raw Hugging Face training summaries (which have mismatched metric structures) could overwrite or share names with the comparative `evaluation_summary.json`, crashing the UI with a `KeyError`.
 - **Solution**: Implemented a structural validator function `is_valid_summary(s)` in [app.py](file:///c:/workspaceag/slmgpuv1/slm-tr/app.py) verifying the presence of key comparative keys (`"raw_model"` and `"trained_model"`) prior to ingestion, assuring graceful fallback.
 
+### 4. ETA Visual Zero-Out & Lighter Est. Color
+- **Problem**: Once training completed, the remaining time (ETA) would fall back to `"Estimating..."` with color `#889`, which appeared black and unreadable on the dark cards.
+- **Solution**: Refactored [app.py](file:///c:/workspaceag/slmgpuv1/slm-tr/app.py#L689) to detect if `current_step >= max_steps` and immediately display **`00:00:00`** in bright green (`#10b981`). Used a lighter, readable grey (`#aab`) during startup estimations.
+
+### 5. Post-Training Testing Status Notice Banner
+- **Problem**: Training completes quickly, but comparative evaluation takes another 8-10 minutes on CPU. Users were confused why training completed but metrics still showed reference baselines.
+- **Solution**: Added a warning banner in [app.py](file:///c:/workspaceag/slmgpuv1/slm-tr/app.py#L425) indicating that training was successful and the post-training tester is actively compiling metrics inside the container.
+
+### 6. Parameterized Trainer Auto-Calibration
+- **Problem**: Calibration duration was hardcoded to 35 minutes, making rapid testing difficult.
+- **Solution**: Updated [train_classifier.py](file:///c:/workspaceag/slmgpuv1/slm-tr/train_classifier.py#L205) to read target duration via the environment variable `CALIBRATION_TARGET_SECONDS` (defaulting to 2100.0 seconds). Setting this to 10 seconds runs a rapid 300-sample verification in under a minute!
+
 ---
 
 ## 📂 Active Repository & Deployment State
@@ -35,27 +49,26 @@ We successfully resolved the dashboard metrics sync issue where the **SLM Traini
 - **Remote Git Repository**: `github.com:graval/slm-gpu-trainer.git`
 - **Docker Registry Image Tag**: `gauravraval/slm-trainer:gpucpu` (Successfully built and pushed to Docker Hub)
 - **Modified & Synced Files**:
-  - [slm-tr/app.py](file:///c:/workspaceag/slmgpuv1/slm-tr/app.py) — Robust comparative metrics loading & fallbacks
-  - [slm-tr/Dockerfile](file:///c:/workspaceag/slmgpuv1/slm-tr/Dockerfile) — Integrated missing scripts and auto CRLF-to-LF conversion
-  - [slm-tr/deployment/docker-compose.yml](file:///c:/workspaceag/slmgpuv1/slm-tr/deployment/docker-compose.yml) — Unified compose exposure
+  - [slm-tr/app.py](file:///c:/workspaceag/slmgpuv1/slm-tr/app.py) — Dynamic notice banners, ETA zero-out, and robust summary loaders
+  - [slm-tr/Dockerfile](file:///c:/workspaceag/slmgpuv1/slm-tr/Dockerfile) — Integrated scripts and line-endings conversion
+  - [slm-tr/train_classifier.py](file:///c:/workspaceag/slmgpuv1/slm-tr/train_classifier.py) — Dynamic calibration environment variable
+  - [slm-tr/evaluate_comparison.py](file:///c:/workspaceag/slmgpuv1/slm-tr/evaluate_comparison.py) — Comparative evaluator
+  - [slm-tr/deployment/docker-compose.yml](file:///c:/workspaceag/slmgpuv1/slm-tr/deployment/docker-compose.yml) — Exposes ports
   - [slm-tr/docker-entrypoint.sh](file:///c:/workspaceag/slmgpuv1/slm-tr/docker-entrypoint.sh) — Multi-process background/foreground sequential runner
 
 ---
 
-## 🚀 Commands & Verification Playbook
+## 🚀 Commands & Playbook
 
-### To Run Locally on Your GPU Tower (with NVIDIA RTX sm_120 Support):
-This launches the UI dashboard on port 8501 in the background, trains the DeBERTa model on the GPU, executes evaluation, and saves the output to a local timestamped host directory:
+### Normal Production GPU Execution:
+This launches the UI, trains DeBERTa on GPU, executes testing, and outputs timestamped folders:
 ```bash
 docker run --gpus all --rm -d -p 8501:8501 --name slm-trainer-gpu -e DATASET_FILE=lmd_2023_dataset.csv -v "c:\workspaceag\slmgpuv1\slm-tr\external:/app/external" gauravraval/slm-trainer:gpucpu classifier
 ```
 
-### To Run Qwen LoRA Generator Fine-Tuning:
+### Rapid Verification CPU Execution (For testing purposes):
+Runs training and testing sequence in under 1 minute:
 ```bash
-docker run --gpus all --rm -d -p 8501:8501 --name slm-trainer-gpu -e DATASET_FILE=lmd_2023_dataset.csv -v "c:\workspaceag\slmgpuv1\slm-tr\external:/app/external" gauravraval/slm-trainer:gpucpu generator
+docker run --rm -d -p 8501:8501 --name slm-trainer-cpu -e DATASET_FILE=lmd_2023_dataset.csv -e CALIBRATION_TARGET_SECONDS=10 -v "c:\workspaceag\slmgpuv1\slm-tr\external:/app/external" gauravraval/slm-trainer:gpucpu classifier --epochs 1 --batch_size 8
 ```
-
-### Useful Diagnostics Checklist:
-- **Inspect Streamlit logs inside the container**: `docker exec slm-trainer-gpu cat /app/streamlit.log`
-- **Check training printouts**: `docker logs slm-trainer-gpu`
-- **Verify host output directories**: Check [external/trainedoutput/](file:///c:/workspaceag/slmgpuv1/slm-tr/external/trainedoutput/) for the generated `deberta-lateral-movement-YYYYMMDD_HHMMSS` timestamped directories containing final weights, configurations, and evaluation logs.
+*(Note: Cap test split in `evaluate_comparison.py` to 100 samples if verifying this quickly on CPU).*
