@@ -6,6 +6,10 @@ EXTERNAL_DIR="/app/external"
 LOCAL_CSV_DIR="/app/data"
 LOCAL_CSV="${LOCAL_CSV_DIR}/lmd_2023_dataset.csv"
 
+# Configure Hugging Face to cache all downloaded base models in the host-mounted external folder
+export HF_HOME="${EXTERNAL_DIR}/base_models"
+mkdir -p "$HF_HOME"
+
 echo "=========================================================="
 echo "      🚀 SLM Lateral Movement Docker Training Runner     "
 echo "=========================================================="
