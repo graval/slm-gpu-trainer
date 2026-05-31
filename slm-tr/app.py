@@ -561,13 +561,12 @@ elif "🚀 Live Training Monitor" in page:
                 """, unsafe_allow_html=True)
                 
             with col_status_right:
-                st.markdown('<div class="card" style="padding: 12px; text-align: center; height: 90px; display: flex; flex-direction: column; justify-content: center; align-items: center;">', unsafe_allow_html=True)
-                auto_refresh = st.checkbox("Live Polling", value=True, help="Enable automatic background page refresh to stream container progress.")
-                if auto_refresh:
-                    st.markdown('<span style="font-size: 0.75rem; color: #10b981; font-weight:600;">● Live Stream Active</span>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<span style="font-size: 0.75rem; color: #889;">○ Paused</span>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    auto_refresh = st.checkbox("Live Polling", value=True, help="Enable automatic background page refresh to stream container progress.")
+                    if auto_refresh:
+                        st.markdown('<span style="font-size: 0.75rem; color: #10b981; font-weight:600;">● Live Stream Active</span>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span style="font-size: 0.75rem; color: #889;">○ Paused</span>', unsafe_allow_html=True)
                 
             # Progress bar
             curr_step = progress_data.get("current_step", 0)
@@ -587,37 +586,44 @@ elif "🚀 Live Training Monitor" in page:
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             
             with m_col1:
-                st.markdown('<div class="card" style="text-align: center; height: 110px;">', unsafe_allow_html=True)
-                st.markdown('<div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Training Loss</div>', unsafe_allow_html=True)
                 loss = progress_data.get("loss", 0.0)
-                st.markdown(f'<div style="font-size: 2.0rem; font-weight: 800; color: #e254ff; margin-top: 5px;">{loss:.4f}</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="card" style="text-align: center; height: 110px;">
+                    <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Training Loss</div>
+                    <div style="font-size: 2.0rem; font-weight: 800; color: #e254ff; margin-top: 5px;">{loss:.4f}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             with m_col2:
-                st.markdown('<div class="card" style="text-align: center; height: 110px;">', unsafe_allow_html=True)
-                st.markdown('<div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Learning Rate</div>', unsafe_allow_html=True)
                 lr = progress_data.get("learning_rate", 0.0)
-                st.markdown(f'<div style="font-size: 1.8rem; font-weight: 800; color: #4791ff; margin-top: 8px;">{lr:.2e}</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="card" style="text-align: center; height: 110px;">
+                    <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Learning Rate</div>
+                    <div style="font-size: 1.8rem; font-weight: 800; color: #4791ff; margin-top: 8px;">{lr:.2e}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             with m_col3:
                 elapsed_sec = progress_data.get("elapsed_time", 0.0)
                 elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed_sec))
-                st.markdown('<div class="card" style="text-align: center; height: 110px;">', unsafe_allow_html=True)
-                st.markdown('<div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Elapsed Time</div>', unsafe_allow_html=True)
-                st.markdown(f'<div style="font-size: 2.0rem; font-weight: 800; color: white; margin-top: 5px; font-family: monospace;">{elapsed_str}</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="card" style="text-align: center; height: 110px;">
+                    <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Elapsed Time</div>
+                    <div style="font-size: 2.0rem; font-weight: 800; color: white; margin-top: 5px; font-family: monospace;">{elapsed_str}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             with m_col4:
                 eta_sec = progress_data.get("eta_seconds", 0.0)
                 eta_str = time.strftime('%H:%M:%S', time.gmtime(eta_sec)) if eta_sec > 0 else "00:00:00"
-                st.markdown('<div class="card" style="text-align: center; height: 110px;">', unsafe_allow_html=True)
-                st.markdown('<div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Remaining (ETA)</div>', unsafe_allow_html=True)
-                if eta_sec > 0:
-                    st.markdown(f'<div style="font-size: 2.0rem; font-weight: 800; color: #10b981; margin-top: 5px; font-family: monospace;">{eta_str}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="font-size: 1.8rem; font-weight: 800; color: #889; margin-top: 8px; font-family: monospace;">Estimating...</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                eta_display = eta_str if eta_sec > 0 else "Estimating..."
+                eta_color = "#10b981" if eta_sec > 0 else "#889"
+                st.markdown(f"""
+                <div class="card" style="text-align: center; height: 110px;">
+                    <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Remaining (ETA)</div>
+                    <div style="font-size: 1.8rem; font-weight: 800; color: {eta_color}; margin-top: 8px; font-family: monospace;">{eta_display}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
             # Loss Curve Chart
             st.markdown("### 📊 Loss Optimization Curve")
