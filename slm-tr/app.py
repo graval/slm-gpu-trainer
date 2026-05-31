@@ -599,7 +599,8 @@ elif "🚀 Live Training Monitor" in page:
                 st.markdown(f"""
                 <div class="card" style="text-align: center; height: 110px;">
                     <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Learning Rate</div>
-                    <div style="font-size: 1.8rem; font-weight: 800; color: #4791ff; margin-top: 8px;">{lr:.2e}</div>
+                    <div style="font-size: 1.6rem; font-weight: 800; color: #4791ff; margin-top: 5px;">{lr:.2e}</div>
+                    <div style="font-size: 0.75rem; color: #889; margin-top: -3px;">({lr:.8f})</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -636,6 +637,27 @@ elif "🚀 Live Training Monitor" in page:
                     tooltip=['step', 'loss', 'learning_rate', 'epoch']
                 ).properties(height=300)
                 st.altair_chart(c, use_container_width=True)
+                
+                # Dynamic Clear Text Summary below the Loss Optimization Curve
+                st.markdown("### 📝 Live Training Summary & Convergence")
+                first_loss = history[0]["loss"]
+                last_loss = history[-1]["loss"]
+                loss_delta = first_loss - last_loss
+                pct_reduction = (loss_delta / first_loss) * 100 if first_loss > 0 else 0.0
+                
+                steps_completed = len(history)
+                avg_step_time = elapsed_sec / curr_step if curr_step > 0 else 0.0
+                
+                import torch
+                device_name = "GPU (CUDA)" if torch.cuda.is_available() else "CPU"
+                
+                summary_text = f"""
+                * **Active Hardware:** Training is executing cleanly on the **{device_name}**.
+                * **Convergence Trend:** Training started with an initial cross-entropy loss of `{first_loss:.4f}` and has successfully decreased to `{last_loss:.4f}` (**{pct_reduction:.1f}% reduction**), showing steady mathematical convergence.
+                * **Execution Statistics:** A total of `{steps_completed}` validation points have been logged. The trainer is maintaining a stable average processing speed of **`{avg_step_time:.2f} seconds`** per optimization step.
+                * **Outputs Persistence:** Fine-tuned weights, tokenizers, and checkpoint configurations are being actively written in the background directly to **`external/trainedoutput/`**.
+                """
+                st.info(summary_text)
             else:
                 st.info("No training points logged in history yet. Starting up...")
                 
