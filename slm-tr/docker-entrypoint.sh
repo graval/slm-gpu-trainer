@@ -3,7 +3,6 @@ set -e
 
 # Path to the mounted external directory
 EXTERNAL_DIR="/app/external"
-EXTERNAL_CSV="${EXTERNAL_DIR}/lmd_2023_dataset.csv"
 LOCAL_CSV_DIR="/app/data"
 LOCAL_CSV="${LOCAL_CSV_DIR}/lmd_2023_dataset.csv"
 
@@ -11,18 +10,49 @@ echo "=========================================================="
 echo "      🚀 SLM Lateral Movement Docker Training Runner     "
 echo "=========================================================="
 
-# Check if the external folder is mounted and contains the CSV
-if [ ! -f "$EXTERNAL_CSV" ]; then
-    echo "[!] ERROR: Could not find 'lmd_2023_dataset.csv' in the mounted folder."
-    echo "    Please mount a folder containing the dataset CSV to /app/external."
-    echo "    Example:"
-    echo "      docker run --gpus all -v /path/to/my/data:/app/external slm-trainer <command>"
+# Dynamically locate the CSV dataset file in /app/external
+if [ -n "$DATASET_FILE" ] && [ -f "${EXTERNAL_DIR}/${DATASET_FILE}" ]; then
+    EXTERNAL_CSV="${EXTERNAL_DIR}/${DATASET_FILE}"
+    echo "[*] Using dataset specified via environment variable: ${EXTERNAL_CSV}"
+else
+    # Automatically detect CSV files in the mounted folder
+    CSV_FILES=($(find "$EXTERNAL_DIR" -maxdepth 1 -name "*.csv" -type f 2>/dev/null))
+    if [ ${#CSV_FILES[@]} -eq 1 ]; then
+        EXTERNAL_CSV="${CSV_FILES[0]}"
+        echo "[*] Auto-detected single CSV dataset in external folder: ${EXTERNAL_CSV}"
+    elif [ ${#CSV_FILES[@]} -gt 1 ]; then
+        # If there are multiple, check if one matches 'lmd_2023_dataset.csv' or 'dataset.csv' as a preference
+        PREF_FILE=""
+        for f in "${CSV_FILES[@]}"; do
+            basename_f=$(basename "$f")
+            if [ "$basename_f" = "lmd_2023_dataset.csv" ] || [ "$basename_f" = "dataset.csv" ]; then
+                PREF_FILE="$f"
+                break
+            fi
+        done
+        if [ -n "$PREF_FILE" ]; then
+            EXTERNAL_CSV="$PREF_FILE"
+            echo "[*] Multiple CSVs found. Selecting preferred dataset: ${EXTERNAL_CSV}"
+        else
+            EXTERNAL_CSV="${CSV_FILES[0]}"
+            echo "[!] WARNING: Multiple CSV files found in mounted folder. Selecting the first one: ${EXTERNAL_CSV}"
+            echo "    Tip: You can specify your exact file using: -e DATASET_FILE=your_file.csv"
+        fi
+    else
+        EXTERNAL_CSV=""
+    fi
+fi
+
+# Check if a CSV was located
+if [ -z "$EXTERNAL_CSV" ] || [ ! -f "$EXTERNAL_CSV" ]; then
+    echo "[!] ERROR: Could not find any CSV dataset in the mounted folder."
+    echo "    Please place your dataset CSV file directly inside the mounted folder (/app/external)."
     echo "    Current files in /app/external:"
     ls -la "$EXTERNAL_DIR" 2>/dev/null || echo "    (Directory /app/external does not exist or is empty)"
     exit 1
 fi
 
-# Ensure local data directory exists and symlink or copy the CSV
+# Ensure local data directory exists and symlink the CSV
 mkdir -p "$LOCAL_CSV_DIR"
 if [ -f "$LOCAL_CSV" ] || [ -L "$LOCAL_CSV" ]; then
     rm -f "$LOCAL_CSV"
