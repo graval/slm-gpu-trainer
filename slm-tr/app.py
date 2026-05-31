@@ -349,10 +349,12 @@ elif "📊 Training & Metrics" in page:
     """, unsafe_allow_html=True)
     
     summary_file = "evaluation_summary.json"
+    is_cached_baseline = True
     if os.path.exists(summary_file):
         try:
             with open(summary_file, "r") as f:
                 summary = json.load(f)
+            is_cached_baseline = False
         except Exception:
             summary = None
     else:
@@ -365,6 +367,39 @@ elif "📊 Training & Metrics" in page:
             "raw_model": {"accuracy": 0.1244, "f1_macro": 0.0737, "precision_macro": 0.0415, "recall_macro": 0.3333, "false_positives": 150, "false_negatives": 0, "avg_latency_ms": 36.45},
             "trained_model": {"accuracy": 0.8706, "f1_macro": 0.6345, "precision_macro": 0.6062, "recall_macro": 0.6667, "false_positives": 0, "false_negatives": 25, "avg_latency_ms": 36.31}
         }
+        is_cached_baseline = True
+        
+    # Check if a live training run is in progress
+    live_progress_file = "external/training_progress.json"
+    live_training_active = False
+    if os.path.exists(live_progress_file):
+        try:
+            with open(live_progress_file, "r") as f:
+                progress = json.load(f)
+            if progress.get("status") == "training":
+                live_training_active = True
+        except Exception:
+            pass
+            
+    # Premium status notice banner
+    if is_cached_baseline:
+        if live_training_active:
+            st.warning("""
+            ℹ️ **Showing Pre-Trained Baseline Results**  
+            The metrics below correspond to a prior reference training run completed on **May 28, 2026**.  
+            🚀 **Live training is currently in progress!** Your custom models are actively fine-tuning in the background inside the Docker container. Once training completes, this page will automatically refresh with your custom live results!
+            """)
+        else:
+            st.info("""
+            ℹ️ **Showing Pre-Trained Baseline Results**  
+            The metrics below correspond to a prior reference training run completed on **May 28, 2026**.  
+            To view custom model results, start a new training container run using the EDR docker console.
+            """)
+    else:
+        st.success(f"""
+        ✅ **Showing Live Fine-Tuned Custom Model Results**  
+        The metrics below represent the performance of your custom model fine-tuned on **{summary.get('timestamp', 'Recent Run')}**.
+        """)
         
     raw_m = summary["raw_model"]
     trained_m = summary["trained_model"]
