@@ -202,8 +202,9 @@ def calibrate_dataset_size(model, tokenizer, train_dataset, val_dataset, device,
     """Dynamically calibrates the dataset downsampling rate to target ~35 minutes total execution."""
     t_train, t_val = profile_model_speed(model, tokenizer, device, batch_size)
     
-    # Target duration: 35 minutes (2100 seconds)
-    target_seconds = 2100.0
+    # Target duration: 35 minutes (2100 seconds) or dynamic from env var
+    import os
+    target_seconds = float(os.environ.get("CALIBRATION_TARGET_SECONDS", 2100.0))
     
     # Let validation dataset be 20% of training dataset size.
     # Therefore, N_val_batches = N_train_batches * 0.2 (since batch sizes are equal).
