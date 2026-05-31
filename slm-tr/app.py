@@ -687,10 +687,20 @@ elif "🚀 Live Training Monitor" in page:
                 """, unsafe_allow_html=True)
                 
             with m_col4:
+                curr_step = progress_data.get("current_step", 0)
+                max_steps = progress_data.get("max_steps", 100)
                 eta_sec = progress_data.get("eta_seconds", 0.0)
-                eta_str = time.strftime('%H:%M:%S', time.gmtime(eta_sec)) if eta_sec > 0 else "00:00:00"
-                eta_display = eta_str if eta_sec > 0 else "Estimating..."
-                eta_color = "#10b981" if eta_sec > 0 else "#889"
+                
+                if curr_step >= max_steps:
+                    eta_display = "00:00:00"
+                    eta_color = "#10b981"
+                elif eta_sec > 0:
+                    eta_display = time.strftime('%H:%M:%S', time.gmtime(eta_sec))
+                    eta_color = "#4791ff"
+                else:
+                    eta_display = "Estimating..."
+                    eta_color = "#aab"
+                    
                 st.markdown(f"""
                 <div class="card" style="text-align: center; height: 110px;">
                     <div style="font-size: 0.8rem; color: #889; font-weight:600; text-transform:uppercase;">Remaining (ETA)</div>
