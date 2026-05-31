@@ -20,6 +20,10 @@ services:
               capabilities: [gpu]
     # -------------------------------------------------------------
 
+    ports:
+      # Exposes the EDR dashboard launched in the background at container startup
+      - "8501:8501"
+
     volumes:
       # Map the host directory containing 'lmd_2023_dataset.csv' to /app/external
       # The trained model weights will be saved directly into a 'trainedoutput' subfolder here.

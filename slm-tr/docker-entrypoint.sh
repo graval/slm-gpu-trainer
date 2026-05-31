@@ -97,27 +97,56 @@ else
     shift # Remove the first argument, leaving any additional custom arguments (like --epochs, etc.)
 fi
 
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 OUTPUT_MOUNT_DIR="${EXTERNAL_DIR}/trainedoutput"
 mkdir -p "$OUTPUT_MOUNT_DIR"
 
 if [ "$CHOICE" = "classifier" ]; then
+    # 1. Launch EDR Security Dashboard in the background inside the container
+    echo "[*] Launching EDR Security Dashboard in background inside container (Port 8501)..."
+    streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /app/streamlit.log 2>&1 &
+    
+    # 2. Run DeBERTa Classifier Training
     echo "[*] Starting DeBERTa Classifier training (Full training cycle)..."
     python train_classifier.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/deberta-lateral-movement" "$@"
     
-    echo "[*] Copying trained model weights to host mount point: ${OUTPUT_MOUNT_DIR}/deberta-lateral-movement"
-    mkdir -p "${OUTPUT_MOUNT_DIR}/deberta-lateral-movement"
-    cp -rf /app/models/deberta-lateral-movement/* "${OUTPUT_MOUNT_DIR}/deberta-lateral-movement/"
-    echo "[+] SUCCESS: Classifier model successfully created at host folder: ${OUTPUT_MOUNT_DIR}/deberta-lateral-movement"
+    # 3. Post-Training Comparative Evaluation/Testing
+    echo "[*] Starting post-training comparative evaluation & testing..."
+    python evaluate_comparison.py
+    
+    # 4. Define and copy to timestamped host mount directory
+    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/deberta-lateral-movement-${TIMESTAMP}"
+    echo "[*] Copying trained model weights and reports to host mount: ${RUN_FOLDER}"
+    mkdir -p "${RUN_FOLDER}"
+    cp -rf /app/models/deberta-lateral-movement/* "${RUN_FOLDER}/"
+    
+    # Copy evaluation files to both the timestamped folder and the root of external mount
+    if [ -f "/app/evaluation_summary.json" ]; then
+        cp -f "/app/evaluation_summary.json" "${RUN_FOLDER}/"
+        cp -f "/app/evaluation_summary.json" "${EXTERNAL_DIR}/evaluation_summary.json"
+    fi
+    if [ -f "/app/evaluation_summary.log" ]; then
+        cp -f "/app/evaluation_summary.log" "${RUN_FOLDER}/"
+        cp -f "/app/evaluation_summary.log" "${EXTERNAL_DIR}/evaluation_summary.log"
+    fi
+    
+    echo "[+] SUCCESS: Classifier model and evaluation summary successfully persisted!"
 
 elif [ "$CHOICE" = "generator" ]; then
+    # 1. Launch EDR Security Dashboard in the background inside the container
+    echo "[*] Launching EDR Security Dashboard in background inside container (Port 8501)..."
+    streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /app/streamlit.log 2>&1 &
+    
+    # 2. Run Qwen LoRA Generator Training
     echo "[*] Starting Qwen LoRA Generator training (Full training cycle)..."
-    # Run LoRA training. Enable QLoRA to conserve VRAM if needed.
     python train_generator.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/qwen-lateral-movement" "$@"
     
-    echo "[*] Copying trained LoRA adapters to host mount point: ${OUTPUT_MOUNT_DIR}/qwen-lateral-movement"
-    mkdir -p "${OUTPUT_MOUNT_DIR}/qwen-lateral-movement"
-    cp -rf /app/models/qwen-lateral-movement/* "${OUTPUT_MOUNT_DIR}/qwen-lateral-movement/"
-    echo "[+] SUCCESS: LoRA adapters successfully created at host folder: ${OUTPUT_MOUNT_DIR}/qwen-lateral-movement"
+    # 3. Define and copy to timestamped host mount directory
+    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/qwen-lateral-movement-${TIMESTAMP}"
+    echo "[*] Copying trained LoRA adapters to host mount: ${RUN_FOLDER}"
+    mkdir -p "${RUN_FOLDER}"
+    cp -rf /app/models/qwen-lateral-movement/* "${RUN_FOLDER}/"
+    echo "[+] SUCCESS: LoRA adapters successfully persisted!"
 
 elif [ "$CHOICE" = "dashboard" ] || [ "$CHOICE" = "ui" ]; then
     echo "[*] Starting SLM EDR Security Console Dashboard inside container..."

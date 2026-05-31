@@ -34,9 +34,9 @@ RUN pip install --upgrade pip && \
 
 COPY data/loader.py ./data/loader.py
 COPY scripts/ ./scripts/
-COPY train_classifier.py train_generator.py detect.py app.py eval.py ./
+COPY train_classifier.py train_generator.py detect.py app.py eval.py evaluate_comparison.py ./
 
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

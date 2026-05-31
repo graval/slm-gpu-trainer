@@ -349,17 +349,54 @@ elif "📊 Training & Metrics" in page:
     """, unsafe_allow_html=True)
     
     summary_file = "evaluation_summary.json"
+    external_summary_file = "external/evaluation_summary.json"
     is_cached_baseline = True
-    if os.path.exists(summary_file):
+    summary = None
+
+    def is_valid_summary(s):
+        return isinstance(s, dict) and "raw_model" in s and "trained_model" in s
+
+    # 1. Try to find the latest training summary inside timestamped folders
+    external_trained_dir = "external/trainedoutput"
+    if os.path.exists(external_trained_dir):
+        import glob
+        dirs = glob.glob(os.path.join(external_trained_dir, "deberta-lateral-movement*"))
+        if dirs:
+            # Sort by modification time to get the most recent directory
+            dirs.sort(key=os.path.getmtime, reverse=True)
+            latest_summary = os.path.join(dirs[0], "evaluation_summary.json")
+            if os.path.exists(latest_summary):
+                try:
+                    with open(latest_summary, "r") as f:
+                        data = json.load(f)
+                    if is_valid_summary(data):
+                        summary = data
+                        is_cached_baseline = False
+                except Exception:
+                    pass
+
+    # 2. Try to read the shared external summary file directly
+    if not summary and os.path.exists(external_summary_file):
+        try:
+            with open(external_summary_file, "r") as f:
+                data = json.load(f)
+            if is_valid_summary(data):
+                summary = data
+                is_cached_baseline = False
+        except Exception:
+            pass
+
+    # 3. Fallback to local root summary file
+    if not summary and os.path.exists(summary_file):
         try:
             with open(summary_file, "r") as f:
-                summary = json.load(f)
-            is_cached_baseline = False
+                data = json.load(f)
+            if is_valid_summary(data):
+                summary = data
+                is_cached_baseline = False
         except Exception:
             summary = None
-    else:
-        summary = None
-        
+
     if not summary:
         summary = {
             "timestamp": "2026-05-28T12:47:00+05:30",
