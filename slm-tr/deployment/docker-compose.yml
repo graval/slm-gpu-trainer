@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  slm-trainer:
+    image: gauravraval/slm-trainer:gpucpu
+    container_name: slm-trainer
+    
+    # GPU Acceleration configuration (NVIDIA CUDA)
+    # -------------------------------------------------------------
+    # IMPORTANT: If you are running on a CPU-only system or do not have
+    # the NVIDIA Container Toolkit installed, comment out this entire 
+    # 'deploy' block to prevent startup errors. The container will
+    # automatically fallback to CPU mode when running PyTorch.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # -------------------------------------------------------------
+
+    volumes:
+      # Map the host directory containing 'lmd_2023_dataset.csv' to /app/external
+      # The trained model weights will be saved directly into a 'trainedoutput' subfolder here.
+      # By default, maps a folder called 'external' in the parent directory.
+      # You can override this by setting the EXTERNAL_DATA_DIR environment variable.
+      - ${EXTERNAL_DATA_DIR:-../external}:/app/external
+
+    # Default command is 'classifier'. Change to 'generator' to run Qwen LoRA fine-tuning.
+    # Supported commands:
+    #   1. "classifier" (DeBERTa-v3 Classifier)
+    #   2. "generator" (Qwen LoRA Generator)
+    #   3. Custom shell commands (e.g., "bash", "python detect.py ...")
+    command: ["classifier", "--epochs", "3", "--batch_size", "8"]

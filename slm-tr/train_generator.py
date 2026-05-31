@@ -113,6 +113,89 @@ def parse_args():
     parser.add_argument("--int8", action="store_true", default=False, help="Use 8-bit quantization (Quanto for CPU / BitsAndBytes for GPU)")
     return parser.parse_args()
 
+def profile_generator_speed(model, tokenizer, device):
+    """Profiles the Qwen LoRA training speed (seconds per sample) on the active device."""
+    print("[*] Running a brief causal LLM hardware performance profile...")
+    import time
+    
+    # Create a tiny dummy text
+    dummy_text = "<|im_start|>user\nAnalyze this Windows security log for potential lateral movement activity:\nEvent ID: 1\nImage: cmd.exe\nCommand Line: cmd.exe /c echo Hello<|im_end|>\n<|im_start|>assistant\n{\n  \"lateral_movement\": false\n}<|im_end|>"
+    
+    inputs = tokenizer(dummy_text, truncation=True, max_length=128, return_tensors="pt")
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs["labels"] = inputs["input_ids"].clone()
+    
+    # Measure a forward and backward pass
+    model.train()
+    try:
+        # Warm-up step
+        outputs = model(**inputs)
+        loss = outputs.loss
+        loss.backward()
+        if hasattr(model, "zero_grad"):
+            model.zero_grad()
+    except Exception as e:
+        print(f"[!] LLM Warm-up step failed: {e}. Defaulting to safe fallback speeds.")
+        return 12.0  # Safe fallback of 12 seconds per sample on typical CPU
+        
+    start_time = time.time()
+    steps = 2
+    for _ in range(steps):
+        outputs = model(**inputs)
+        loss = outputs.loss
+        loss.backward()
+        if hasattr(model, "zero_grad"):
+            model.zero_grad()
+    t_step = (time.time() - start_time) / steps
+    
+    # Scale for typical sequence length of ~512
+    t_sample = t_step * 3.0
+    return t_sample
+
+def calibrate_generator_dataset_size(model, tokenizer, train_dataset, val_dataset, device, epochs):
+    """Dynamically calibrates the dataset downsampling rate to target ~40 minutes total execution."""
+    t_sample = profile_generator_speed(model, tokenizer, device)
+    
+    # Target duration: 40 minutes (2400 seconds)
+    target_seconds = 2400.0
+    
+    # Total time equation:
+    # Total_Time = Epochs * N_train_samples * t_sample
+    # N_train_samples = Total_Time / (Epochs * t_sample)
+    
+    denom = epochs * t_sample
+    if denom <= 0:
+        denom = 1.0
+    n_train_samples = int(target_seconds / denom)
+    
+    # Enforce safe limits:
+    # Min samples: 30 to ensure some LoRA learning occurs
+    # Max samples: 2,000 to keep within reasonable limits
+    n_train_samples = max(30, min(n_train_samples, 2000))
+    
+    n_val_samples = max(10, min(int(n_train_samples * 0.1), 200))
+    
+    est_total_seconds = epochs * n_train_samples * t_sample
+    est_minutes = est_total_seconds / 60.0
+    
+    # Draw a premium calibration console dashboard
+    print("+" + "=" * 68 + "+")
+    print(f"|                  DYNAMIC HARDWARE CALIBRATION DASHBOARD            |")
+    print("+" + "=" * 68 + "+")
+    print(f"|  Device detected:        {device.upper():<41} |")
+    print(f"|  Measured Step Speed:    {t_sample*1000:.1f}ms/sample (scaled)                  |")
+    print(f"|  Target Duration:        40.0 minutes (2,400 seconds)              |")
+    print(f"|  Calibrated Dataset:     Train Size={n_train_samples:<6}                         |")
+    print(f"|                          Val Size={n_val_samples:<6}                           |")
+    print(f"|  Estimated Run Time:     {est_minutes:.1f} minutes ({int(est_total_seconds)} seconds)            |")
+    print("+" + "=" * 68 + "+")
+    
+    # Perform downsampling
+    train_sampled = train_dataset.select(range(min(len(train_dataset), n_train_samples)))
+    val_sampled = val_dataset.select(range(min(len(val_dataset), n_val_samples)))
+    
+    return train_sampled, val_sampled
+
 def main():
     args = parse_args()
     
@@ -135,9 +218,9 @@ def main():
         print("    [!] WARNING: Fine-tuning a 1.5B+ parameter model on CPU is extremely slow.")
         print("    [*] Recommendation: Run on a system with a CUDA GPU, or in Google Colab / Kaggle.")
         
-    # Load dataset
+    # Load raw dataset
     try:
-        train_dataset, val_dataset = load_lmd_for_decoder(
+        raw_train_dataset, raw_val_dataset = load_lmd_for_decoder(
             args.csv_path,
             balance_classes=True
         )
@@ -145,13 +228,6 @@ def main():
         print(f"[!] Error loading dataset: {e}")
         sys.exit(1)
         
-    # Downsample for quick CPU training demonstration
-    if device == "cpu":
-        print("\n[*] OPTIMIZING FOR CPU: Downsampling dataset to a tiny subset for ultra-fast training...")
-        train_dataset = train_dataset.select(range(min(len(train_dataset), 3)))
-        val_dataset = val_dataset.select(range(min(len(val_dataset), 1)))
-        print(f"[+] CPU Balanced Dataset: Train size={len(train_dataset)}, Val size={len(val_dataset)}")
-
     print(f"\n[*] Initializing Tokenizer: {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -185,6 +261,16 @@ def main():
         device_map="auto" if device == "cuda" else None,
         torch_dtype=torch_dtype,
         trust_remote_code=False
+    )
+    
+    # Dynamic Hardware Performance Profiling and Dataset Calibration
+    train_dataset, val_dataset = calibrate_generator_dataset_size(
+        model,
+        tokenizer,
+        raw_train_dataset,
+        raw_val_dataset,
+        device,
+        args.epochs
     )
     
     # Configure LoRA

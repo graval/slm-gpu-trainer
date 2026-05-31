@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bash Utility: Tag & Push SLM Trainer Images to Docker Hub
+# Bash Utility: Tag & Push SLM Trainer Image (gpucpu unified tag) to Docker Hub
 
 # Color declarations
 CYAN='\033[0;36m'
@@ -19,14 +19,7 @@ if [ -z "$dockerHubUser" ]; then
     exit 1
 fi
 
-# 2. Select image variant
-echo -e "\n${GREEN}Select the image variant you want to push:${NC}"
-echo "  1) GPU Accelerated Image (slm-trainer:gpu)"
-echo "  2) CPU Standard Image (slm-trainer:cpu)"
-echo "  3) Both Variants"
-read -p "Choice (1-3): " variantChoice
-
-# 3. Prompt for Login verification
+# 2. Prompt for Login verification
 echo -e "\n${YELLOW}[!] IMPORTANT: Ensure you have executed 'docker login' in your shell beforehand.${NC}"
 read -p "Are you logged into Docker Hub? (y/n): " loginConfirm
 if [ "$loginConfirm" != "y" ] && [ "$loginConfirm" != "yes" ]; then
@@ -34,27 +27,14 @@ if [ "$loginConfirm" != "y" ] && [ "$loginConfirm" != "yes" ]; then
     exit 1
 fi
 
-# 4. Perform tagging and pushing
-if [ "$variantChoice" = "1" ] || [ "$variantChoice" = "3" ]; then
-    echo -e "\n${GREEN}[*] Tagging GPU image...${NC}"
-    docker tag slm-trainer:gpu "${dockerHubUser}/slm-trainer:gpu"
-    
-    echo -e "${GREEN}[*] Pushing GPU image to Docker Hub...${NC}"
-    docker push "${dockerHubUser}/slm-trainer:gpu"
-    
-    echo -e "${GREEN}[✓] GPU image successfully pushed to: https://hub.docker.com/r/${dockerHubUser}/slm-trainer${NC}"
-fi
+# 3. Perform tagging and pushing
+echo -e "\n${GREEN}[*] Tagging unified GPU/CPU image...${NC}"
+docker tag gauravraval/slm-trainer:gpucpu "${dockerHubUser}/slm-trainer:gpucpu"
 
-if [ "$variantChoice" = "2" ] || [ "$variantChoice" = "3" ]; then
-    echo -e "\n${GREEN}[*] Tagging CPU image...${NC}"
-    docker tag slm-trainer:cpu "${dockerHubUser}/slm-trainer:cpu"
-    
-    echo -e "${GREEN}[*] Pushing CPU image to Docker Hub...${NC}"
-    docker push "${dockerHubUser}/slm-trainer:cpu"
-    
-    echo -e "${GREEN}[✓] CPU image successfully pushed to: https://hub.docker.com/r/${dockerHubUser}/slm-trainer${NC}"
-fi
+echo -e "${GREEN}[*] Pushing unified GPU/CPU image to Docker Hub...${NC}"
+docker push "${dockerHubUser}/slm-trainer:gpucpu"
 
+echo -e "\n${GREEN}[✓] Image successfully pushed to: https://hub.docker.com/r/${dockerHubUser}/slm-trainer${NC}"
 echo -e "${CYAN}=======================================================================${NC}"
 echo -e "${CYAN}🎉 DEPLOYMENT ASSISTANT COMPLETED!${NC}"
 echo -e "${CYAN}=======================================================================${NC}"
