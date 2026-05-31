@@ -31,5 +31,13 @@ services:
     # Supported commands:
     #   1. "classifier" (DeBERTa-v3 Classifier)
     #   2. "generator" (Qwen LoRA Generator)
-    #   3. Custom shell commands (e.g., "bash", "python detect.py ...")
     command: ["classifier", "--epochs", "3", "--batch_size", "8"]
+
+  slm-dashboard:
+    image: gauravraval/slm-trainer:gpucpu
+    container_name: slm-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ${EXTERNAL_DATA_DIR:-../external}:/app/external
+    command: ["dashboard"]

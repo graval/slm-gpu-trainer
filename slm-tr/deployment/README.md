@@ -97,6 +97,28 @@ A single image handles both modes. However, since the Docker Daemon requires har
 
 ---
 
+### Mode 3: Containerized EDR Dashboard Console
+*Highly recommended to monitor and visualize training progress directly inside Docker.*
+
+#### To Run:
+Expose port `8501` and launch the Streamlit server completely inside Docker by running:
+```bash
+docker compose up -d slm-dashboard
+```
+
+#### Accessing the Dashboard:
+Once running, open your web browser on your host machine to:
+* **Dashboard URL:** [http://localhost:8501](http://localhost:8501)
+
+The containerized dashboard will automatically read `/app/external/training_progress.json` through the shared volume and render your training run's stats, loss curves, and ETAs live!
+
+To stop the dashboard container:
+```bash
+docker compose down
+```
+
+---
+
 ## 🐳 Docker Hub Push Operations
 
 If you build or modify the image locally and need to push it to a remote registry so it can be pulled easily on your remote NVIDIA tower:

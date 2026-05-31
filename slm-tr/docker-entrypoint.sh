@@ -119,6 +119,10 @@ elif [ "$CHOICE" = "generator" ]; then
     cp -rf /app/models/qwen-lateral-movement/* "${OUTPUT_MOUNT_DIR}/qwen-lateral-movement/"
     echo "[+] SUCCESS: LoRA adapters successfully created at host folder: ${OUTPUT_MOUNT_DIR}/qwen-lateral-movement"
 
+elif [ "$CHOICE" = "dashboard" ] || [ "$CHOICE" = "ui" ]; then
+    echo "[*] Starting SLM EDR Security Console Dashboard inside container..."
+    exec streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+
 else
     # Allow executing arbitrary command (e.g. bash, detect.py, etc.)
     echo "[*] Executing custom command: $CHOICE $@"
