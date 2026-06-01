@@ -21,9 +21,10 @@ host-project-root/ (slm-tr/)
 │   └── README.md
 ├── external/                <-- HOST DIRECTORY (YOUR MOUNT POINT)
 │   ├── lmd_2023_dataset.csv <-- [INPUT] Place your raw dataset here!
+│   ├── evaluation_summary.json <-- [TELEMETRY] Dynamic UI metrics
 │   └── trainedoutput/       <-- [OUTPUT] Created automatically by training
-│       ├── deberta-lateral-movement/
-│       └── qwen-lateral-movement/
+│       ├── deberta-lateral-movement-YYYYMMDD_HHMMSS/
+│       └── qwen-lateral-movement-YYYYMMDD_HHMMSS/
 ```
 
 ### Mount Path Configuration
@@ -38,6 +39,17 @@ volumes:
 > - **Custom Host Paths:** If you want to use a directory located elsewhere on your host (e.g., an external drive or a dedicated data disk), you can override the default path by defining the `EXTERNAL_DATA_DIR` environment variable:
 >   * *Windows Powershell:* `$env:EXTERNAL_DATA_DIR="D:\datasets\slm_data"`
 >   * *Linux Bash:* `export EXTERNAL_DATA_DIR="/mnt/datasets/slm_data"`
+
+---
+
+## ⚡ Unified Execution Pipeline: Dashboard + Training + Testing
+
+Our consolidated Docker entrypoint orchestrates the **entire pipeline in a single execution sequence**. 
+When you run a command like `classifier`, the container:
+1. **Launches the Streamlit EDR UI** dashboard in the background inside the container (available at `http://localhost:8501`).
+2. **Executes DeBERTa Classifier model training** in the foreground, dynamically streaming loss logs and training progress directly onto the dashboard *Live Training Monitor*.
+3. **Automatically executes the post-training comparative testing suite** (`evaluate_comparison.py`) as soon as training finishes, evaluating raw vs. fine-tuned model performance.
+4. **Saves all results** to unique timestamped directories and updates the dashboard dynamically with custom live metrics!
 
 ---
 
@@ -61,47 +73,39 @@ A single image handles both modes. However, since the Docker Daemon requires har
 
 #### To Run:
 1. Ensure the `deploy:` device reservation block is **active** (uncommented) in `docker-compose.yml`.
-2. Start training using:
+2. Start the unified pipeline:
    ```bash
-   # Option A: Train DeBERTa Classifier SLM
-   docker compose run --rm slm-trainer classifier
-   
-   # Option B: Train Qwen Generative SLM (with 4-bit VRAM optimization)
-   docker compose run --rm slm-trainer generator --epochs 3 --batch_size 2 --qlora
+   # Train DeBERTa Classifier, UI, and Evaluator in sequence:
+   docker compose up slm-trainer
    ```
 
 ---
 
-### Mode 2: CPU Fallback Mode
+### Mode 2: CPU Fallback & Hardware Calibration Mode
 *Ideal for lightweight validation, testing, or environments without discrete NVIDIA hardware.*
 
 #### How the Fallback Works:
 - **PyTorch Fallback:** The container uses a single CUDA-enabled runtime that executes perfectly on CPU when no GPU resources are exposed.
-- **Auto-Downsampling:** When running the classifier on CPU, the container automatically downsamples the dataset to a balanced subset to run the entire training and validation cycle in seconds rather than hours.
+- **Dynamic Performance Auto-Calibration:** When running on CPU, the container automatically micro-benchmarks the host's CPU speeds and solves the training time equation to scale down the training partition to execute cleanly in under **35 minutes** (2100 seconds).
+- **CALIBRATION_TARGET_SECONDS Parameter:** You can parameterize the target duration using this environment variable. For example, setting it to `10` runs an ultra-fast verification run with a minimum of 300 samples in under a minute to quickly validate UI updates:
+  ```powershell
+  # Powershell command for rapid CPU validation:
+  docker run --rm -d -p 8501:8501 --name slm-trainer-cpu -e DATASET_FILE=lmd_2023_dataset.csv -e CALIBRATION_TARGET_SECONDS=10 -v "c:\workspaceag\slmgpuv1\slm-tr\external:/app/external" gauravraval/slm-trainer:gpucpu classifier --epochs 1 --batch_size 8
+  ```
 
 #### To Run:
-1. **Comment out** the `deploy:` block inside `docker-compose.yml` to prevent Docker Compose from throwing a hardware driver exception on startup:
-   ```yaml
-   # deploy:
-   #   resources:
-   #     reservations:
-   #       devices:
-   #         - driver: nvidia
-   #           count: all
-   #           capabilities: [gpu]
-   ```
-2. Start training:
+1. **Comment out** the `deploy:` block inside `docker-compose.yml` to prevent Docker Compose from throwing a hardware driver exception on startup.
+2. Start the pipeline:
    ```bash
-   docker compose run --rm slm-trainer classifier
+   docker compose up slm-trainer
    ```
 
 ---
 
-### Mode 3: Containerized EDR Dashboard Console
-*Highly recommended to monitor and visualize training progress directly inside Docker.*
+### Mode 3: Standalone Dashboard Mode
+*Use this mode if you only want to spin up the Streamlit EDR UI dashboard to inspect prior training runs without executing any new training.*
 
 #### To Run:
-Expose port `8501` and launch the Streamlit server completely inside Docker by running:
 ```bash
 docker compose up -d slm-dashboard
 ```
@@ -110,9 +114,7 @@ docker compose up -d slm-dashboard
 Once running, open your web browser on your host machine to:
 * **Dashboard URL:** [http://localhost:8501](http://localhost:8501)
 
-The containerized dashboard will automatically read `/app/external/training_progress.json` through the shared volume and render your training run's stats, loss curves, and ETAs live!
-
-To stop the dashboard container:
+To stop the standalone dashboard container:
 ```bash
 docker compose down
 ```

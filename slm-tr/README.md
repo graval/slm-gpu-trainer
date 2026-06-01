@@ -34,32 +34,40 @@ The project features a dual-model architecture designed for high-performance cla
 
 ---
 
-## ⚡ Option 1: GPU-Accelerated Container Training (Docker)
+## ⚡ Option 1: Unified Container Training & UI Ingest (Docker)
 
-If you have a host tower with an NVIDIA graphics card and want to run the full training cycles while keeping datasets and outputs external, follow the Docker pipeline:
+This project features a unified container sequence utilizing a single image (`gauravraval/slm-trainer:gpucpu`) and a centralized `docker-compose.yml` to run the entire pipeline: starts the Streamlit EDR UI in the background, trains the model in the foreground, executes comparative testing, and updates the metrics automatically.
 
 ### 1. Place your Dataset
-Create a folder called `external/` in the project root and place `lmd_2023_dataset.csv` inside it.
+Create a folder called `external/` in the project root and place your `lmd_2023_dataset.csv` inside it.
 
-### 2. Navigate and Build
+### 2. Navigate and Run (Full GPU Acceleration)
+To launch DeBERTa Sequence Classifier training on an **NVIDIA GPU** tower (supporting sm_120 Blackwell architectures natively):
 ```bash
 cd deployment/
-docker compose -f docker-compose-gpu.yml build
+docker compose up slm-trainer
+```
+*To run the generative Qwen LoRA Decoder fine-tuning instead, open `deployment/docker-compose.yml` and change the `command` target to `["generator"]`.*
+
+### 3. Run on CPU Fallback (Dynamic Calibration)
+If you are running on a standard CPU system without an NVIDIA GPU, comment out the `deploy` CUDA devices block in `docker-compose.yml` and run:
+```bash
+docker compose up slm-trainer
+```
+- PyTorch will fall back to CPU execution, and the **Dynamic Hardware Performance Calibration** engine will automatically profile the CPU speed and calibrate the downsampling training size to complete cleanly in under **35 minutes** (defaulting to 2100 seconds).
+
+### 4. Dynamic Run controls (Rapid UI & Testing Validation)
+You can parameterize the target duration for the CPU calibration by passing `CALIBRATION_TARGET_SECONDS` as an environment variable (e.g. setting it to 10 seconds runs a rapid 300-sample verification loop in under a minute to validate your UI):
+```bash
+# Run in PowerShell or Bash with custom duration limit:
+docker run --rm -d -p 8501:8501 --name slm-trainer-cpu -e DATASET_FILE=lmd_2023_dataset.csv -e CALIBRATION_TARGET_SECONDS=10 -v "c:\workspaceag\slmgpuv1\slm-tr\external:/app/external" gauravraval/slm-trainer:gpucpu classifier --epochs 1 --batch_size 8
 ```
 
-### 3. Run Training (Full CUDA Acceleration)
-* **Train DeBERTa Classifier:**
-  ```bash
-  docker compose -f docker-compose-gpu.yml run --rm slm-trainer-gpu classifier
-  ```
-* **Train Qwen LoRA Generator:**
-  ```bash
-  docker compose -f docker-compose-gpu.yml run --rm slm-trainer-gpu generator --epochs 3 --batch_size 2 --qlora
-  ```
+### 5. Outputs Persistence
+- Fine-tuned weights, adapters, tokenizers, checkpoints, and evaluation summaries will automatically be written directly to your host's `./external/trainedoutput/deberta-lateral-movement-YYYYMMDD_HHMMSS/` directory (timestamped at container startup).
+- `evaluation_summary.json` is written directly to the host's root `./external/` folder to be ingested instantly by any active Streamlit EDR dashboard!
 
-*The final model weights will automatically be created in your host folder at `./external/trainedoutput/`!*
-
-> See the [Deployment README](deployment/README.md) for more details, including CPU-only container steps.
+> See the [Deployment README](deployment/README.md) for full compose parameterizations.
 
 ---
 

@@ -12,10 +12,12 @@ Once running, your `external/` folder will be structured as follows:
 external/
 ├── README.md               # This configuration guide
 ├── *.csv                   # Your input dataset files (e.g. lmd_2023_dataset.csv)
+├── evaluation_summary.json # Active telemetry comparison file read by dashboard UI
+├── evaluation_summary.log  # Append-only logs showing raw vs fine-tuned historic runs
 ├── base_models/            # Persistent Hugging Face cache (Auto-created)
 └── trainedoutput/          # Fine-tuned model checkpoints (Auto-created)
-    ├── deberta-lateral-movement/   # Fine-tuned Encoder Classifier
-    └── qwen-lateral-movement/      # Fine-tuned Causal Decoder LoRA adapters
+    ├── deberta-lateral-movement-YYYYMMDD_HHMMSS/ # Timestamped Classifier folder
+    └── qwen-lateral-movement-YYYYMMDD_HHMMSS/    # Timestamped LoRA Generator folder
 ```
 
 ---
@@ -43,8 +45,10 @@ To prevent downloading massive base models (like DeBERTa or Qwen) repeatedly and
 
 ---
 
-## 📦 3. Model Training Outputs (`trainedoutput/`)
+## 📦 3. Model Training Outputs & Telemetry Logs (`trainedoutput/`)
 
 Upon successful completion of a training loop, the container automatically preserves your results on your host disk:
-1. **Classifier Model (`trainedoutput/deberta-lateral-movement/`)**: Contains the fully trained weights, tokenizer config, and evaluation logs for the sequence classifier.
-2. **Generator Model (`trainedoutput/qwen-lateral-movement/`)**: Contains the trained Low-Rank Adaptation (LoRA) weights and configuration files for causal security event explanations.
+1. **Timestamped Classifier Run (`trainedoutput/deberta-lateral-movement-YYYYMMDD_HHMMSS/`)**: Contains the fully fine-tuned classifier weights, configuration files, checkpoint records, and the specific comparative metrics files (`evaluation_summary.json` / `.log`).
+2. **Timestamped Generator Run (`trainedoutput/qwen-lateral-movement-YYYYMMDD_HHMMSS/`)**: Contains the Low-Rank Adaptation (LoRA) weights and configuration files for explainable causal security reasoning.
+3. **Dynamic Dashboard Metrics (`external/evaluation_summary.json`)**: Formulated by the post-training tester, this file is written to the root of the mounted host folder at the end of training. Any active Streamlit SOC Web Dashboard immediately consumes it, refreshing to show live custom fine-tuned results!
+4. **Historical Quality Logs (`external/evaluation_summary.log`)**: An append-only log recording model metrics comparison deltas. Checking in this file keeps a historical audit trail of security model improvements!
