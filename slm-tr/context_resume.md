@@ -55,6 +55,10 @@ We successfully validated the entire pipeline's end-to-end telemetry and UI dyna
   - [slm-tr/evaluate_comparison.py](file:///c:/workspaceag/slmgpuv1/slm-tr/evaluate_comparison.py) — Comparative evaluator
   - [slm-tr/deployment/docker-compose.yml](file:///c:/workspaceag/slmgpuv1/slm-tr/deployment/docker-compose.yml) — Exposes ports
   - [slm-tr/docker-entrypoint.sh](file:///c:/workspaceag/slmgpuv1/slm-tr/docker-entrypoint.sh) — Multi-process background/foreground sequential runner
+  - [slm-tr/README.md](file:///c:/workspaceag/slmgpuv1/slm-tr/README.md) — Updated to reflect consolidated pipelines, tags, and calibration
+  - [slm-tr/deployment/README.md](file:///c:/workspaceag/slmgpuv1/slm-tr/deployment/README.md) — Updated to match single-image parameterization details
+  - [slm-tr/external/README.md](file:///c:/workspaceag/slmgpuv1/slm-tr/external/README.md) — Updated to reflect persistent timestamped logging directories
+  - [slm-tr/data/README.md](file:///c:/workspaceag/slmgpuv1/slm-tr/data/README.md) — [NEW] Documents balanced downsampling and Sysmon logging schemas
 
 ---
 
