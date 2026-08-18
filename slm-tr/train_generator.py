@@ -1,9 +1,20 @@
 import os
 import sys
 import argparse
-import torch
 import time
 import json
+import pathlib
+
+# Ensure UTF-8 default decoding for Windows systems when loading jinja templates in trl
+os.environ["PYTHONUTF8"] = "1"
+_orig_read_text = pathlib.Path.read_text
+def _utf8_read_text(self, encoding=None, errors=None):
+    if encoding is None:
+        encoding = "utf-8"
+    return _orig_read_text(self, encoding=encoding, errors=errors)
+pathlib.Path.read_text = _utf8_read_text
+
+import torch
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -27,6 +38,22 @@ class ProgressCallback(TrainerCallback):
         
         # Secondary progress file inside external folder (for shared access in Docker / Dashboard)
         self.external_progress_file = "external/training_progress.json"
+
+        # Immediately overwrite the progress file to signal starting a new active run
+        initial_progress = {
+            "model_name": self.model_name,
+            "status": "training",
+            "current_step": 0,
+            "max_steps": 100,
+            "epoch": 0.0,
+            "loss": 0.0,
+            "learning_rate": 0.0,
+            "elapsed_time": 0.0,
+            "eta_seconds": 0.0,
+            "history": []
+        }
+        self._save_progress(initial_progress)
+
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero:
@@ -111,6 +138,8 @@ def parse_args():
     parser.add_argument("--learning_rate", type=float, default=2e-4, help="LoRA learning rate")
     parser.add_argument("--qlora", action="store_true", default=False, help="Use 4-bit QLoRA to save memory (requires bitsandbytes)")
     parser.add_argument("--int8", action="store_true", default=False, help="Use 8-bit quantization (Quanto for CPU / BitsAndBytes for GPU)")
+    parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
+    parser.add_argument("--max_length", type=int, default=512, help="Maximum token sequence length (default: 512)")
     return parser.parse_args()
 
 def profile_generator_speed(model, tokenizer, device):
@@ -153,28 +182,51 @@ def profile_generator_speed(model, tokenizer, device):
     return t_sample
 
 def calibrate_generator_dataset_size(model, tokenizer, train_dataset, val_dataset, device, epochs):
-    """Dynamically calibrates the dataset downsampling rate to target ~40 minutes total execution."""
+    """Dynamically calibrates the dataset downsampling rate to target ~1 hour total execution on CPU or GPU limits, but uses full dataset on GPU if it takes <= 2 hours."""
     t_sample = profile_generator_speed(model, tokenizer, device)
     
-    # Target duration: 40 minutes (2400 seconds)
-    target_seconds = 2400.0
+    # Check GPU availability
+    is_gpu = "cuda" in device.lower()
     
-    # Total time equation:
-    # Total_Time = Epochs * N_train_samples * t_sample
-    # N_train_samples = Total_Time / (Epochs * t_sample)
+    # Calculate training duration for the FULL dataset
+    full_train_samples = len(train_dataset)
+    full_val_samples = len(val_dataset)
+    estimated_full_duration = epochs * full_train_samples * t_sample
     
-    denom = epochs * t_sample
-    if denom <= 0:
-        denom = 1.0
-    n_train_samples = int(target_seconds / denom)
+    # Target duration: 1 hour (3600 seconds) by default, or from env var
+    import os
+    target_seconds = float(os.environ.get("CALIBRATION_TARGET_SECONDS", 3600.0))
     
-    # Enforce safe limits:
-    # Min samples: 30 to ensure some LoRA learning occurs
-    # Max samples: 2,000 to keep within reasonable limits
-    n_train_samples = max(30, min(n_train_samples, 2000))
-    
-    n_val_samples = max(10, min(int(n_train_samples * 0.1), 200))
-    
+    # GPU logic:
+    # Use full dataset if GPU is available and full training takes <= 2 hours (7200 seconds)
+    # Unless CALIBRATION_TARGET_SECONDS env var is explicitly set to something else (e.g. for fast tests)
+    use_full_dataset = False
+    if is_gpu and "CALIBRATION_TARGET_SECONDS" not in os.environ:
+        if estimated_full_duration <= 7200.0: # 2 hours
+            use_full_dataset = True
+            target_seconds = estimated_full_duration
+        else:
+            # If it takes > 2 hours, limit to 1 hour
+            target_seconds = 3600.0
+            
+    if use_full_dataset:
+        n_train_samples = full_train_samples
+        n_val_samples = full_val_samples
+    else:
+        # Calibrate based on target_seconds
+        denom = epochs * t_sample
+        if denom <= 0:
+            denom = 1.0
+        n_train_samples = int(target_seconds / denom)
+        
+        # Enforce safe limits:
+        # Min samples: 30 to ensure some LoRA learning occurs
+        # Max samples: cannot exceed full training dataset size
+        n_train_samples = max(30, min(n_train_samples, full_train_samples))
+        
+        n_val_samples = max(10, min(int(n_train_samples * 0.1), full_val_samples))
+        
+    # Recalculate estimated total time
     est_total_seconds = epochs * n_train_samples * t_sample
     est_minutes = est_total_seconds / 60.0
     
@@ -184,7 +236,10 @@ def calibrate_generator_dataset_size(model, tokenizer, train_dataset, val_datase
     print("+" + "=" * 68 + "+")
     print(f"|  Device detected:        {device.upper():<41} |")
     print(f"|  Measured Step Speed:    {t_sample*1000:.1f}ms/sample (scaled)                  |")
-    print(f"|  Target Duration:        40.0 minutes (2,400 seconds)              |")
+    if use_full_dataset:
+        print(f"|  Mode:                   FULL DATASET TRAINING (GPU <= 2 Hours)    |")
+    else:
+        print(f"|  Target Duration:        {target_seconds/60.0:.1f} minutes ({int(target_seconds)} seconds)             |")
     print(f"|  Calibrated Dataset:     Train Size={n_train_samples:<6}                         |")
     print(f"|                          Val Size={n_val_samples:<6}                           |")
     print(f"|  Estimated Run Time:     {est_minutes:.1f} minutes ({int(est_total_seconds)} seconds)            |")
@@ -199,9 +254,34 @@ def calibrate_generator_dataset_size(model, tokenizer, train_dataset, val_datase
 def main():
     args = parse_args()
     
+    # Immediately initialize the progress telemetry to signal starting a new active run
+    try:
+        initial_progress = {
+            "model_name": f"Qwen LoRA Generator ({args.model_name})",
+            "status": "training",
+            "current_step": 0,
+            "max_steps": 100,
+            "epoch": 0.0,
+            "loss": 0.0,
+            "learning_rate": 0.0,
+            "elapsed_time": 0.0,
+            "eta_seconds": 0.0,
+            "history": []
+        }
+        os.makedirs(args.output_dir, exist_ok=True)
+        with open(os.path.join(args.output_dir, "training_progress.json"), "w") as f:
+            import json
+            json.dump(initial_progress, f, indent=4)
+        if os.path.exists("external"):
+            with open("external/training_progress.json", "w") as f:
+                json.dump(initial_progress, f, indent=4)
+    except Exception:
+        pass
+
     print("=" * 70)
     print("      [+] DECODER-ONLY GENERATIVE SLM LORA FINE-TUNING [+]      ")
     print("=" * 70)
+
     
     # Verify dataset
     if not os.path.exists(args.csv_path):
@@ -222,6 +302,7 @@ def main():
     try:
         raw_train_dataset, raw_val_dataset = load_lmd_for_decoder(
             args.csv_path,
+            window_size=args.window_size,
             balance_classes=True
         )
     except Exception as e:
@@ -299,12 +380,12 @@ def main():
         weight_decay=0.01,
         eval_strategy="epoch",
         save_strategy="epoch",
-        logging_steps=10,
+        logging_steps=1 if device == "cpu" else 10,
         fp16=(device == "cuda" and not args.qlora and not use_bf16),
         bf16=(device == "cuda" and not args.qlora and use_bf16),
         report_to="none",
         dataset_text_field="text",
-        max_length=512,
+        max_length=args.max_length,
         packing=False
     )
     

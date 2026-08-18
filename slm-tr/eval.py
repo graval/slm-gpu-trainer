@@ -16,11 +16,13 @@ torch.set_num_threads(2)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate DeBERTa SLM Lateral Movement Classifier Performance")
-    parser.add_argument("--csv_path", type=str, default="external/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
+    parser.add_argument("--csv_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
     parser.add_argument("--model_path", type=str, default="models/deberta-lateral-movement", help="Path to fine-tuned model directory")
     parser.add_argument("--base_model", type=str, default="microsoft/deberta-v3-small", help="Hugging Face base model name for raw evaluation")
     parser.add_argument("--is_raw", action="store_true", default=False, help="Set this flag to test the raw, untrained base model")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for evaluation")
+    parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
+    parser.add_argument("--max_length", type=int, default=256, help="Maximum token length for tokenizer (default: 256)")
     return parser.parse_args()
 
 def main():
@@ -33,7 +35,7 @@ def main():
     # Check dataset existence
     if not os.path.exists(args.csv_path):
         print(f"[!] ERROR: Dataset not found at: {args.csv_path}")
-        print("    Please ensure you have placed 'lmd_2023_dataset.csv' inside your external/ folder.")
+        print("    Please ensure you have placed 'lmd_2023_dataset.csv' inside your data/ folder.")
         sys.exit(1)
         
     # Check device
@@ -41,11 +43,12 @@ def main():
     print(f"[*] Evaluation Device: {device.upper()}")
     
     # 1. Load the split dataset (keeping the 20% test partition)
-    print(f"[*] Loading dataset and isolating test partition...")
+    print(f"[*] Loading dataset and isolating test partition (Window Size={args.window_size})...")
     try:
         # We use a fixed random state (42) to isolate an identical test partition for pre/post training comparison
         _, test_dataset = load_lmd_dataset(
             args.csv_path, 
+            window_size=args.window_size,
             balance_classes=True,
             test_size=0.2,
             random_state=42
@@ -76,7 +79,7 @@ def main():
         return tokenizer(
             examples['formatted_text'], 
             truncation=True, 
-            max_length=64
+            max_length=args.max_length
         )
         
     print("[*] Tokenizing test dataset...")

@@ -157,3 +157,13 @@ else
     echo "[*] Executing custom command: $CHOICE $@"
     exec "$CHOICE" "$@"
 fi
+
+# Keep container alive by waiting for the background Streamlit process if we started it
+if [ "$CHOICE" = "classifier" ] || [ "$CHOICE" = "generator" ]; then
+    echo "=========================================================="
+    echo "[*] All training tasks completed successfully!"
+    echo "[*] Keeping SLM EDR Security Console Dashboard alive..."
+    echo "[*] Access the dashboard at http://localhost:8501"
+    echo "=========================================================="
+    wait
+fi

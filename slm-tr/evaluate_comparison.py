@@ -9,8 +9,20 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding
 from data.loader import load_lmd_dataset
 
+import argparse
+
 # Limit CPU threads to optimize context switching
 torch.set_num_threads(2)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Evaluate Comparison (Raw vs Fine-Tuned DeBERTa)")
+    parser.add_argument("--csv_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
+    parser.add_argument("--base_model", type=str, default="microsoft/deberta-v3-small", help="Hugging Face base model name")
+    parser.add_argument("--model_path", type=str, default="models/deberta-lateral-movement", help="Path to fine-tuned model directory")
+    parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
+    parser.add_argument("--max_length", type=int, default=256, help="Maximum token length for tokenizer (default: 256)")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for evaluation")
+    return parser.parse_args()
 
 def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device, batch_size=16):
     print(f"[*] Loading model parameters from: {model_path} ...")
@@ -53,7 +65,7 @@ def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device,
             
     end_time = time.perf_counter()
     total_duration_ms = (end_time - start_time) * 1000.0
-    avg_latency_ms = total_duration_ms / len(test_dataset)
+    avg_latency_ms = total_duration_ms / max(1, len(test_dataset))
     
     # Calculate classification metrics
     accuracy = accuracy_score(all_labels, all_preds)
@@ -86,13 +98,14 @@ def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device,
     }
 
 def main():
+    args = parse_args()
     print("=" * 80)
     print("      [🔍] SLM COMPARATIVE METRICS EVALUATOR (RAW vs. FINE-TUNED)      ")
     print("=" * 80)
     
-    csv_path = "data/lmd_2023_dataset.csv"
-    base_model = "microsoft/deberta-v3-small"
-    fine_tuned_path = "models/deberta-lateral-movement"
+    csv_path = args.csv_path
+    base_model = args.base_model
+    fine_tuned_path = args.model_path
     
     if not os.path.exists(csv_path):
         print(f"[!] Dataset not found at: {csv_path}")
@@ -103,14 +116,18 @@ def main():
     print(f"[*] Evaluation Device: {device.upper()}")
     
     # 1. Load dataset (10% test split)
-    print("[*] Loading labeled dataset and isolating 10% test partition...")
+    print(f"[*] Loading labeled dataset and isolating 10% test partition (Window Size={args.window_size})...")
     # We use a fixed random state to ensure exact reproducible test splits
     _, test_dataset = load_lmd_dataset(
         csv_path, 
+        window_size=args.window_size,
         balance_classes=True,
         test_size=0.1,
         random_state=42
     )
+    if device == "cpu":
+        print("[*] CPU Mode Detected: Downsampling test partition to 200 samples for rapid evaluation calibration...")
+        test_dataset = test_dataset.select(range(min(200, len(test_dataset))))
     print(f"[+] Isolated Test Split: {len(test_dataset):,} samples.")
     
     # 2. Tokenize dataset
@@ -121,7 +138,7 @@ def main():
         return tokenizer(
             examples['formatted_text'], 
             truncation=True, 
-            max_length=64
+            max_length=args.max_length
         )
         
     print("[*] Tokenizing test dataset...")

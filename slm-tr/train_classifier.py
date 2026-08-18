@@ -30,6 +30,22 @@ class ProgressCallback(TrainerCallback):
         # Secondary progress file inside external folder (for shared access in Docker / Dashboard)
         self.external_progress_file = "external/training_progress.json"
 
+        # Immediately overwrite the progress file to signal starting a new active run
+        initial_progress = {
+            "model_name": self.model_name,
+            "status": "training",
+            "current_step": 0,
+            "max_steps": 100,
+            "epoch": 0.0,
+            "loss": 0.0,
+            "learning_rate": 0.0,
+            "elapsed_time": 0.0,
+            "eta_seconds": 0.0,
+            "history": []
+        }
+        self._save_progress(initial_progress)
+
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero:
             logs = logs or {}
@@ -111,6 +127,8 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--balance_classes", action="store_true", default=True, help="Balance dataset classes via downsampling")
+    parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
+    parser.add_argument("--max_length", type=int, default=256, help="Maximum token length for tokenizer (up to 512, default: 256)")
     return parser.parse_args()
 
 def compute_metrics(eval_pred):
@@ -148,7 +166,7 @@ def compute_metrics(eval_pred):
     
     return metrics
 
-def profile_model_speed(model, tokenizer, device, batch_size):
+def profile_model_speed(model, tokenizer, device, batch_size, max_length=256):
     """Profiles the training and evaluation speed (seconds per batch) on the active device."""
     print("[*] Running a brief hardware performance profile...")
     import time
@@ -160,7 +178,7 @@ def profile_model_speed(model, tokenizer, device, batch_size):
     ]
     
     # Tokenize dummy texts
-    inputs = tokenizer(dummy_texts, padding=True, truncation=True, max_length=64, return_tensors="pt")
+    inputs = tokenizer(dummy_texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt")
     # Duplicate inputs to match batch_size
     inputs = {k: v.repeat((batch_size + 1) // 2, 1)[:batch_size].to(device) for k, v in inputs.items()}
     # Add dummy labels
@@ -198,38 +216,58 @@ def profile_model_speed(model, tokenizer, device, batch_size):
     # Return measured times (in seconds per batch)
     return t_train, t_val
 
-def calibrate_dataset_size(model, tokenizer, train_dataset, val_dataset, device, batch_size, epochs):
-    """Dynamically calibrates the dataset downsampling rate to target ~35 minutes total execution."""
-    t_train, t_val = profile_model_speed(model, tokenizer, device, batch_size)
+def calibrate_dataset_size(model, tokenizer, train_dataset, val_dataset, device, batch_size, epochs, max_length=256):
+    """Dynamically calibrates the dataset downsampling rate to target ~1 hour total execution on CPU or GPU limits, but uses full dataset on GPU if it takes <= 2 hours."""
+    t_train, t_val = profile_model_speed(model, tokenizer, device, batch_size, max_length=max_length)
     
-    # Target duration: 35 minutes (2100 seconds) or dynamic from env var
+    # Check GPU availability
+    is_gpu = "cuda" in device.lower()
+    
+    # 1. Calculate training duration for the FULL dataset
+    full_train_samples = len(train_dataset)
+    full_val_samples = len(val_dataset)
+    full_train_batches = full_train_samples / batch_size
+    full_val_batches = full_val_samples / batch_size
+    estimated_full_duration = epochs * (full_train_batches * t_train + full_val_batches * t_val)
+    
+    # Target duration: 1 hour (3600 seconds) by default, or from env var
     import os
-    target_seconds = float(os.environ.get("CALIBRATION_TARGET_SECONDS", 2100.0))
+    target_seconds = float(os.environ.get("CALIBRATION_TARGET_SECONDS", 3600.0))
     
-    # Let validation dataset be 20% of training dataset size.
-    # Therefore, N_val_batches = N_train_batches * 0.2 (since batch sizes are equal).
-    # Total time equation:
-    # Total_Time = Epochs * (N_train_batches * t_train + N_val_batches * t_val)
-    # Total_Time = Epochs * N_train_batches * (t_train + 0.2 * t_val)
-    # N_train_batches = Total_Time / (Epochs * (t_train + 0.2 * t_val))
-    
-    denom = epochs * (t_train + 0.2 * t_val)
-    if denom <= 0:
-        denom = 1.0
-    n_train_batches = target_seconds / denom
-    n_train_samples = int(n_train_batches * batch_size)
-    
-    # Enforce safe limits:
-    # Min samples: 300 (100 per class) to ensure training still works
-    # Max samples: 30,000 to keep within reasonable system limits
-    n_train_samples = max(300, min(n_train_samples, 30000))
-    # Make divisible by 3 for perfectly balanced classes
-    n_train_samples = (n_train_samples // 3) * 3
-    
-    n_val_samples = int(n_train_samples * 0.2)
-    n_val_samples = max(60, min(n_val_samples, 6000))
-    n_val_samples = (n_val_samples // 3) * 3
-    
+    # GPU logic:
+    # Use full dataset if GPU is available and full training takes <= 2 hours (7200 seconds)
+    # Unless CALIBRATION_TARGET_SECONDS env var is explicitly set to something else (e.g. for fast tests)
+    use_full_dataset = False
+    if is_gpu and "CALIBRATION_TARGET_SECONDS" not in os.environ:
+        if estimated_full_duration <= 7200.0: # 2 hours
+            use_full_dataset = True
+            target_seconds = estimated_full_duration
+        else:
+            # If it takes > 2 hours, limit to 1 hour
+            target_seconds = 3600.0
+            
+    if use_full_dataset:
+        n_train_samples = full_train_samples
+        n_val_samples = full_val_samples
+    else:
+        # Calibrate based on target_seconds
+        denom = epochs * (t_train + 0.2 * t_val)
+        if denom <= 0:
+            denom = 1.0
+        n_train_batches = target_seconds / denom
+        n_train_samples = int(n_train_batches * batch_size)
+        
+        # Enforce safe limits:
+        # Min samples: 300 (100 per class) to ensure training still works
+        # Max samples: cannot exceed full training dataset size
+        n_train_samples = max(300, min(n_train_samples, full_train_samples))
+        # Make divisible by 3 for perfectly balanced classes
+        n_train_samples = (n_train_samples // 3) * 3
+        
+        n_val_samples = int(n_train_samples * 0.2)
+        n_val_samples = max(60, min(n_val_samples, full_val_samples))
+        n_val_samples = (n_val_samples // 3) * 3
+        
     # Estimated time recalculation
     est_train_batches = n_train_samples / batch_size
     est_val_batches = n_val_samples / batch_size
@@ -242,7 +280,10 @@ def calibrate_dataset_size(model, tokenizer, train_dataset, val_dataset, device,
     print("+" + "=" * 68 + "+")
     print(f"|  Device detected:        {device.upper():<41} |")
     print(f"|  Measured Step Speed:    Train={t_train*1000:.1f}ms/batch, Eval={t_val*1000:.1f}ms/batch |")
-    print(f"|  Target Duration:        35.0 minutes (2,100 seconds)              |")
+    if use_full_dataset:
+        print(f"|  Mode:                   FULL DATASET TRAINING (GPU <= 2 Hours)    |")
+    else:
+        print(f"|  Target Duration:        {target_seconds/60.0:.1f} minutes ({int(target_seconds)} seconds)             |")
     print(f"|  Calibrated Dataset:     Train Size={n_train_samples:<6} (balanced)               |")
     print(f"|                          Val Size={n_val_samples:<6} (balanced)                 |")
     print(f"|  Estimated Run Time:     {est_minutes:.1f} minutes ({int(est_total_seconds)} seconds)            |")
@@ -274,9 +315,34 @@ def calibrate_dataset_size(model, tokenizer, train_dataset, val_dataset, device,
 def main():
     args = parse_args()
     
+    # Immediately initialize the progress telemetry to signal starting a new active run
+    try:
+        initial_progress = {
+            "model_name": f"DeBERTa Classifier ({args.model_name})",
+            "status": "training",
+            "current_step": 0,
+            "max_steps": 100,
+            "epoch": 0.0,
+            "loss": 0.0,
+            "learning_rate": 0.0,
+            "elapsed_time": 0.0,
+            "eta_seconds": 0.0,
+            "history": []
+        }
+        os.makedirs(args.output_dir, exist_ok=True)
+        with open(os.path.join(args.output_dir, "training_progress.json"), "w") as f:
+            import json
+            json.dump(initial_progress, f, indent=4)
+        if os.path.exists("external"):
+            with open("external/training_progress.json", "w") as f:
+                json.dump(initial_progress, f, indent=4)
+    except Exception:
+        pass
+
     print("=" * 70)
     print("      [+] DEBERTA-V3 LATERAL MOVEMENT CLASSIFIER TRAINING [+]      ")
     print("=" * 70)
+
     
     # Verify dataset exists
     if not os.path.exists(args.csv_path):
@@ -298,6 +364,7 @@ def main():
     try:
         raw_train_dataset, raw_val_dataset = load_lmd_dataset(
             args.csv_path, 
+            window_size=args.window_size,
             balance_classes=args.balance_classes
         )
     except Exception as e:
@@ -329,14 +396,15 @@ def main():
         raw_val_dataset, 
         device, 
         args.batch_size, 
-        args.epochs
+        args.epochs,
+        max_length=args.max_length
     )
     
     def tokenize_function(examples):
         return tokenizer(
             examples['formatted_text'], 
             truncation=True, 
-            max_length=64
+            max_length=args.max_length
         )
         
     print("[*] Tokenizing datasets...")
