@@ -11,26 +11,32 @@ from data.loader import load_lmd_dataset
 
 import argparse
 
-# Limit CPU threads to optimize context switching
-torch.set_num_threads(2)
+# Try importing DirectML
+try:
+    import torch_directml
+    DML_AVAILABLE = torch_directml.is_available()
+except ImportError:
+    torch_directml = None
+    DML_AVAILABLE = False
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Evaluate Comparison (Raw vs Fine-Tuned DeBERTa)")
+    parser = argparse.ArgumentParser(description="Evaluate Comparison (Raw vs Fine-Tuned SLM)")
     parser.add_argument("--csv_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
-    parser.add_argument("--base_model", type=str, default="microsoft/deberta-v3-small", help="Hugging Face base model name")
+    parser.add_argument("--base_model", type=str, default="auto", help="Hugging Face base model name or 'auto'")
     parser.add_argument("--model_path", type=str, default="models/deberta-lateral-movement", help="Path to fine-tuned model directory")
     parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
-    parser.add_argument("--max_length", type=int, default=256, help="Maximum token length for tokenizer (default: 256)")
-    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for evaluation")
+    parser.add_argument("--max_length", type=int, default=128, help="Maximum token length for tokenizer (default: 128)")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for evaluation")
+    parser.add_argument("--num_samples", type=int, default=1000, help="Number of test samples to evaluate (default: 1000)")
     return parser.parse_args()
 
-def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device, batch_size=16):
+def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device, batch_size=32):
     print(f"[*] Loading model parameters from: {model_path} ...")
     try:
         model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=3)
-        model = model.to(device)
-        if device == "cpu":
+        if str(device) == "cpu":
             model = model.float()
+        model = model.to(device)
         model.eval()
     except Exception as e:
         print(f"[!] Failed to load model: {e}")
@@ -51,17 +57,13 @@ def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device,
     
     with torch.no_grad():
         for batch in dataloader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
-            
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = model(**batch)
             logits = outputs.logits
-            
             preds = torch.argmax(logits, dim=-1).cpu().numpy()
             
             all_preds.extend(preds)
-            all_labels.extend(labels.cpu().numpy())
+            all_labels.extend(batch['labels'].cpu().numpy())
             
     end_time = time.perf_counter()
     total_duration_ms = (end_time - start_time) * 1000.0
@@ -100,11 +102,10 @@ def evaluate_model(model_path, base_model_name, test_dataset, tokenizer, device,
 def main():
     args = parse_args()
     print("=" * 80)
-    print("      [🔍] SLM COMPARATIVE METRICS EVALUATOR (RAW vs. FINE-TUNED)      ")
+    print("      [*] SLM COMPARATIVE METRICS EVALUATOR (RAW vs. FINE-TUNED)      ")
     print("=" * 80)
     
     csv_path = args.csv_path
-    base_model = args.base_model
     fine_tuned_path = args.model_path
     
     if not os.path.exists(csv_path):
@@ -112,12 +113,38 @@ def main():
         print("[!] Please run environment setup or populate the dataset first!")
         sys.exit(1)
         
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[*] Evaluation Device: {device.upper()}")
+    # Auto-resolve device
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        device_name = f"CUDA ({torch.cuda.get_device_name(0)})"
+    elif DML_AVAILABLE and torch_directml.device_count() > 0:
+        device = torch_directml.device()
+        device_name = f"DirectML GPU ({torch_directml.device_name(0).strip()})"
+    else:
+        device = torch.device("cpu")
+        device_name = f"CPU ({os.cpu_count() or 16} Cores)"
+        
+    print(f"[*] Active Evaluation Device: {device_name}")
+    
+    # Auto-resolve base model
+    base_model = args.base_model
+    if base_model == "auto":
+        config_path = os.path.join(fine_tuned_path, "config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as f:
+                    cfg = json.load(f)
+                base_model = cfg.get("_name_or_path", "distilbert-base-uncased")
+            except Exception:
+                base_model = "distilbert-base-uncased"
+        else:
+            base_model = "distilbert-base-uncased"
+            
+    print(f"[*] Base Architecture: {base_model}")
+    print(f"[*] Fine-Tuned Model:  {fine_tuned_path}")
     
     # 1. Load dataset (10% test split)
-    print(f"[*] Loading labeled dataset and isolating 10% test partition (Window Size={args.window_size})...")
-    # We use a fixed random state to ensure exact reproducible test splits
+    print(f"\n[*] Loading labeled dataset and isolating 10% test partition (Window Size={args.window_size})...")
     _, test_dataset = load_lmd_dataset(
         csv_path, 
         window_size=args.window_size,
@@ -125,10 +152,21 @@ def main():
         test_size=0.1,
         random_state=42
     )
-    if device == "cpu":
-        print("[*] CPU Mode Detected: Downsampling test partition to 200 samples for rapid evaluation calibration...")
-        test_dataset = test_dataset.select(range(min(200, len(test_dataset))))
-    print(f"[+] Isolated Test Split: {len(test_dataset):,} samples.")
+    
+    # Sample balanced test evaluation set
+    num_eval_samples = min(args.num_samples, len(test_dataset))
+    test_df = test_dataset.to_pandas()
+    per_class = num_eval_samples // 3
+    sampled = []
+    for lbl in [0, 1, 2]:
+        sub = test_df[test_df['normalized_label'] == lbl]
+        sampled.append(sub.sample(n=min(len(sub), per_class), random_state=42))
+    
+    import pandas as pd
+    from datasets import Dataset
+    test_df_sampled = pd.concat(sampled).sample(frac=1, random_state=42).reset_index(drop=True)
+    test_dataset = Dataset.from_pandas(test_df_sampled)
+    print(f"[+] Isolated Balanced Test Split: {len(test_dataset):,} samples.")
     
     # 2. Tokenize dataset
     print(f"[*] Initializing Tokenizer: {base_model}...")
@@ -144,20 +182,19 @@ def main():
     print("[*] Tokenizing test dataset...")
     tokenized_test = test_dataset.map(tokenize_function, batched=True)
     tokenized_test = tokenized_test.rename_column("normalized_label", "label")
-    tokenized_test.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    tokenized_test = tokenized_test.remove_columns(["formatted_text"])
     
-    # 3. Evaluate Raw Base Model
+    # 3. Evaluate Raw Base Model (Untrained Random Head)
     print("\n" + "-" * 40 + " EVALUATING UNTRAINED / RAW BASE MODEL " + "-" * 40)
-    raw_results = evaluate_model(base_model, base_model, tokenized_test, tokenizer, device)
+    raw_results = evaluate_model(base_model, base_model, tokenized_test, tokenizer, device, batch_size=args.batch_size)
     
     # 4. Evaluate Fine-Tuned Model
     print("\n" + "-" * 40 + " EVALUATING FINE-TUNED MODEL " + "-" * 40)
     if not os.path.exists(fine_tuned_path):
-        print(f"[!] Fine-tuned model not found at: {fine_tuned_path}. Running training on CPU first to obtain checkpoints...")
-        # Fallback to train on CPU to ensure we always have weights
-        os.system(f"python train_classifier.py --epochs 3 --batch_size 8")
+        print(f"[!] Fine-tuned model not found at: {fine_tuned_path}.")
+        sys.exit(1)
         
-    trained_results = evaluate_model(fine_tuned_path, base_model, tokenized_test, tokenizer, device)
+    trained_results = evaluate_model(fine_tuned_path, base_model, tokenized_test, tokenizer, device, batch_size=args.batch_size)
     
     if not raw_results or not trained_results:
         print("[!] Evaluation failed.")
@@ -180,6 +217,11 @@ def main():
         json.dump(summary_data, f, indent=4)
     print(f"\n[+] Structured summary successfully written to: {json_path}")
     
+    ext_json = "external/evaluation_summary.json"
+    if os.path.exists("external"):
+        with open(ext_json, "w") as f:
+            json.dump(summary_data, f, indent=4)
+            
     # Formulate human-readable log entry
     log_entry = f"""======================================================================
 TIMESTAMP: {timestamp_str}
