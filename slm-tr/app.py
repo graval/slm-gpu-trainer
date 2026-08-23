@@ -971,7 +971,10 @@ elif "🛡️ MITRE ATT&CK Defense Matrix" in page:
             st.markdown(f"**Description:** {details['description']}")
             m_col1, m_col2 = st.columns(2)
             with m_col1:
-                st.markdown(f"**Classification Target:** `{details['class']}`")
-                st.markdown(f"**Subtypes Covered:** `{', '.join(details['subtypes'])}`")
+                target_cls = "Class 2: EoHT (Hashing / Credentials)" if "TA0006" in details.get("tactic", "") else "Class 1: EoRS (Remote Services / Lateral Movement)"
+                st.markdown(f"**Classification Target:** `{target_cls}`")
+                tools_list = details.get('common_tools', [])
+                st.markdown(f"**Common Tools & Payloads:** `{', '.join(tools_list)}`")
             with m_col2:
-                st.markdown(f"**Detection Artifacts:** `{', '.join(details['detection_artifacts'])}`")
+                indicators = details.get('telemetry_indicators', [])
+                st.markdown(f"**Telemetry & Event ID Indicators:** `{', '.join(indicators)}`")
