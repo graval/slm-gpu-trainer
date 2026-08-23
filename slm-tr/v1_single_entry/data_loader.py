@@ -81,8 +81,12 @@ def format_single_event_text(row):
 def resolve_dataset_path(csv_path):
     """
     Robustly resolves a dataset CSV file path across local folders (data/, external/, scratch/)
-    and absolute paths inside Docker or host systems.
+    and absolute paths inside Docker or host systems. Supports comma-separated paths.
     """
+    if "," in str(csv_path):
+        resolved = [resolve_dataset_path(p.strip()) for p in str(csv_path).split(",") if p.strip()]
+        return ",".join(resolved)
+
     if os.path.exists(csv_path):
         return os.path.abspath(csv_path)
         
@@ -110,21 +114,35 @@ def resolve_dataset_path(csv_path):
 
 def load_v1_dataset(csv_path, balance_classes=True, test_size=0.2, random_state=42):
     """
-    Loads dataset CSV, normalizes labels, formats each line as a single event,
+    Loads dataset CSV(s), normalizes labels, formats each line as a single event,
     and returns Hugging Face train/validation datasets for v1.
+    Supports single path, list of paths, or comma-separated paths.
     """
-    resolved_path = resolve_dataset_path(csv_path)
-    if not os.path.exists(resolved_path):
-        raise FileNotFoundError(f"Dataset CSV file not found at: {csv_path} (resolved search: {resolved_path})")
+    if isinstance(csv_path, (list, tuple)):
+        paths = csv_path
+    elif "," in str(csv_path):
+        paths = [p.strip() for p in str(csv_path).split(",") if p.strip()]
+    else:
+        paths = [csv_path]
         
-    print(f"[*] [v1 - Single Entry] Loading dataset: {resolved_path} ...")
-    df = pd.read_csv(resolved_path, low_memory=False)
-    print(f"[+] Loaded {len(df):,} events successfully.")
-    
-    label_col = find_label_column(df)
-    if not label_col:
-        raise ValueError("[!] Could not automatically identify the label column in the CSV.")
-    df['normalized_label'] = df[label_col].apply(normalize_label)
+    dfs = []
+    for p in paths:
+        resolved_path = resolve_dataset_path(p)
+        if not os.path.exists(resolved_path):
+            raise FileNotFoundError(f"Dataset CSV file not found at: {p} (resolved search: {resolved_path})")
+            
+        print(f"[*] [v1 - Single Entry] Loading dataset: {resolved_path} ...")
+        df_part = pd.read_csv(resolved_path, low_memory=False)
+        print(f"[+] Loaded {len(df_part):,} events from {os.path.basename(resolved_path)}.")
+        
+        label_col = find_label_column(df_part)
+        if not label_col:
+            raise ValueError(f"[!] Could not automatically identify the label column in {resolved_path}.")
+        df_part['normalized_label'] = df_part[label_col].apply(normalize_label)
+        dfs.append(df_part)
+        
+    df = pd.concat(dfs, ignore_index=True)
+    print(f"[+] Total combined dataset size: {len(df):,} events across {len(paths)} source(s).")
     
     if balance_classes:
         malicious_1 = df[df['normalized_label'] == 1]

@@ -412,10 +412,10 @@ def main():
     
     from v1_single_entry.data_loader import resolve_dataset_path
     args.csv_path = resolve_dataset_path(args.csv_path)
-    
-    if not os.path.exists(args.csv_path):
-        print(f"[!] Dataset not found at: {args.csv_path}")
-        sys.exit(1)
+    for p in args.csv_path.split(","):
+        if not os.path.exists(p.strip()):
+            print(f"[!] Dataset not found at: {p.strip()}")
+            sys.exit(1)
         
     # Resolve Device
     device_mode = args.device.lower()

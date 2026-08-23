@@ -88,9 +88,10 @@ def main():
     from v1_single_entry.data_loader import resolve_dataset_path
     args.csv_path = resolve_dataset_path(args.csv_path)
     
-    if not os.path.exists(args.csv_path):
-        print(f"[!] Dataset not found at: {args.csv_path}")
-        sys.exit(1)
+    for p in args.csv_path.split(","):
+        if not os.path.exists(p.strip()):
+            print(f"[!] Dataset not found at: {p.strip()}")
+            sys.exit(1)
         
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[*] Evaluation Device: {device.upper()}")
@@ -109,6 +110,17 @@ def main():
         
     # Load Model & Tokenizer
     target_path = args.base_model if args.is_raw else args.model_path
+    if not args.is_raw and not os.path.exists(target_path):
+        for cand in [
+            f"{target_path}-v2_sliding_window",
+            f"{target_path}-v1_single_entry",
+            "models/deberta-lateral-movement-v2_sliding_window",
+            "models/deberta-lateral-movement-v1_single_entry"
+        ]:
+            if os.path.exists(cand):
+                target_path = cand
+                break
+                
     print(f"\n[*] Loading Model Weights: {target_path}...")
     try:
         tokenizer = AutoTokenizer.from_pretrained(target_path, use_fast=True)
