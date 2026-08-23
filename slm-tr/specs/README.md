@@ -15,3 +15,4 @@ Welcome to the central specification and context repository for the **SLM Latera
 | [**`05_BENCHMARKS_AND_DATASETS.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/05_BENCHMARKS_AND_DATASETS.md) | Dataset schemas, downsampling contracts, and out-of-distribution DARPA OpTC benchmarking. |
 | [**`06_DEV_WORKFLOW_AND_CLI.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/06_DEV_WORKFLOW_AND_CLI.md) | Virtual environment instructions, CLI threat hunting, and model evaluation commands. |
 | [**`07_BENCHMARK_RESULTS.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/07_BENCHMARK_RESULTS.md) | Verified multi-dataset benchmark results, comparative metrics, and stable model snapshots. |
+| [**`08_EDGESHIELD_FRAMEWORK.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/08_EDGESHIELD_FRAMEWORK.md) | **EdgeShield Dual-Stream SLM Architecture**: LSA + BPD, ATT&CK v15 graph correlation, and INT8 ONNX edge deployment. |

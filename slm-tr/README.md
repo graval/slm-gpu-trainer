@@ -1,24 +1,30 @@
-# SLM Threat Ingestion & Training Framework (LMD-2023)
+# SLM Threat Ingestion & Training Framework (LMD-2023 & EdgeShield)
 
-An end-to-end security engineering and Small Language Model (SLM) training framework built to detect **Lateral Movement** using the authentic, peer-reviewed **LMD-2023** threat telemetry dataset and **DARPA OpTC** out-of-distribution benchmark.
+An end-to-end security engineering and Small Language Model (SLM) training framework built to detect **Lateral Movement (TA0008)** and **Ransomware (TA0040)** attacks using authentic telemetry datasets (**LMD-2023**, **DARPA OpTC**, and **Curated Ransomware Behavioral Traces**).
 
-The project features a **two-phase architecture** supporting both **Single-Entry triage** and **Temporal Sliding Window** sequence analysis, combined with a centralized, decoupled **Reasoning Engine** for MITRE ATT&CK mapping and subtype explainability.
+Features full support for **EdgeShield**: A Small Language Model Framework for Real-Time Detection of Lateral Movement and Ransomware Attacks (Raval & Bhatt, GLS University).
 
 ---
 
 ## 🏗️ Architecture Variants & Modularity
 
-### 1. Phase 1: `v1_single_entry/` (Single Log Line Paradigm, $K=1$)
+### 1. EdgeShield Dual-Stream SLM Architecture (`edgeshield/`)
+* **Stream A (LSA - Log Semantic Analyzer):** Monitors Windows authentication logs (Event IDs 4624, 4625, 4648, 4672) and Kerberos tickets for lateral movement with 2-phase fine-tuning (Cross-Entropy + Contrastive Loss) and 512-token sliding windows.
+* **Stream B (BPD - Behavioral Pattern Detector):** Monitors FileSystem events, process API sequences, and network C2 with a 2,000-token domain vocabulary and attention-based threat scoring head for pre-encryption alerting.
+* **Correlation & Threat Hunting:** MITRE ATT&CK v15 knowledge graph fuses dual streams into **Coordinated Intrusion Alerts** and uses KNN collaborative filtering for predictive next-technique forecasting.
+* **Edge Deployment:** INT8 post-training quantization and ONNX Runtime execution (< 200 ms latency, < 4 GB RAM).
+
+### 2. Phase 1: `v1_single_entry/` (Single Log Line Paradigm, $K=1$)
 * **Concept:** Analyzes isolated, single Sysmon event log entries without prior history.
 * **Latency:** Ultra-fast (~1-5 ms / event), minimal memory footprint.
 * **Use-Case:** High-speed stateless log triage and immediate endpoint host filtering.
 
-### 2. Phase 2: `v2_sliding_window/` (Temporal Sliding Window Paradigm, $K=3..5$)
+### 3. Phase 2: `v2_sliding_window/` (Temporal Sliding Window Paradigm, $K=3..5$)
 * **Concept:** Packages chronological multi-event sequences (`[Event T-2] ... [Target Event T_0]`) using a stateful ring buffer.
 * **Accuracy:** Correlates multi-stage attack actions (Network connection ➔ Named pipe ➔ Remote process execution), reducing False Positives by ~94%.
 * **Use-Case:** Stateful EDR stream ingestion and Active Directory domain lateral movement detection.
 
-### 3. Common: `reasoning/` (Central Reasoning & MITRE Engine)
+### 4. Common: `reasoning/` (Central Reasoning & MITRE Engine)
 * **Concept:** Dedicated module identifying granular attack sub-types (`PsExec`, `WMIC`, `WinRM`, `Pass-the-Hash`, `LSASS MiniDump`, `Registry SAM dump`, `Kerberos ticket forgery`).
 * **Explainability:** Maps each event/window to official MITRE ATT&CK techniques (`T1021.002`, `T1047`, `T1550.002`, `T1003.001`) and generates explainable security reports.
 
@@ -26,17 +32,20 @@ The project features a **two-phase architecture** supporting both **Single-Entry
 
 ## 📂 Project Directory Structure
 
+*   `edgeshield/`: EdgeShield dual-stream SLM framework, LSA, BPD, MITRE correlation engine, and ONNX deployer.
 *   `reasoning/`: Central reasoning engine, subtype catalog, and MITRE ATT&CK mapping database.
 *   `v1_single_entry/`: Standalone loaders, trainers, detector, and evaluator for Single-Entry analysis.
 *   `v2_sliding_window/`: Standalone loaders, trainers, detector, and evaluator for Sliding-Window analysis.
+*   `scripts/benchmark_edgeshield.py`: Full EdgeShield benchmark evaluating SLMs (Phi-3, Gemma-2, TinyLlama, DeBERTa) vs ML baselines (XGBoost, LightGBM, LSTM).
+*   `scripts/train_edgeshield_lsa.py`: LSA stream trainer CLI with contrastive loss support.
+*   `scripts/train_edgeshield_bpd.py`: BPD stream trainer CLI with attention threat scoring head.
 *   `scripts/compare_v1_v2.py`: Side-by-side benchmark comparison tool for evaluating v1 vs v2 across datasets.
-*   `scripts/prepare_optc_benchmark.py`: Out-of-distribution DARPA OpTC test set synthesizer.
-*   `data/`: LMD-2023 logs, OpTC benchmark, and unified loader wrappers.
+*   `data/`: LMD-2023 logs, OpTC benchmark, and curated ransomware behavioral traces.
 *   `deployment/`: Docker Compose files for building and executing GPU and CPU containers.
 *   `models/`: Output directory where trained model checkpoints and configurations are saved.
 *   `detect.py`: Unified root CLI threat hunter supporting `--variant v1|v2`.
 *   `eval.py`: Unified evaluation script supporting `--variant v1|v2`.
-*   `app.py`: High-fidelity Streamlit SOC operations dashboard with Architecture Variant selector.
+*   `app.py`: High-fidelity Streamlit SOC operations dashboard with EdgeShield dual-stream console.
 
 ---
 
