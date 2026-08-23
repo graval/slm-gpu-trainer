@@ -16,6 +16,12 @@ import json
 import argparse
 import numpy as np
 import pandas as pd
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -28,7 +34,9 @@ from edgeshield.data.loader import load_edgeshield_lsa_data, load_edgeshield_bpd
 
 def parse_args():
     parser = argparse.ArgumentParser(description="EdgeShield Comprehensive Benchmark Suite")
-    parser.add_argument("--samples", type=int, default=300, help="Number of evaluation samples per stream")
+    parser.add_argument("--samples", type=int, default=1000, help="Number of evaluation samples per stream")
+    parser.add_argument("--lsa_samples", type=int, default=None, help="LSA test evaluation samples")
+    parser.add_argument("--bpd_samples", type=int, default=None, help="BPD test evaluation samples")
     parser.add_argument("--export_summary", action="store_true", default=True, help="Export benchmark summary JSON")
     return parser.parse_args()
 
@@ -56,17 +64,32 @@ def evaluate_baseline_classifiers(train_texts, train_labels, test_texts, test_la
 
 def main():
     args = parse_args()
+    lsa_count = args.lsa_samples or args.samples
+    bpd_count = args.bpd_samples or args.samples
+
     print("=" * 85)
     print("           [+] EDGESHIELD: DUAL-STREAM SLM BENCHMARK & EVALUATION SUITE            ")
     print("=" * 85)
     
+    print("\n[📊] DATASET INGESTION & DISTRIBUTION PROFILE:")
+    print("  • Primary Lateral Movement Dataset (LMD-2023):  1,752,836 records (1.07 GB)")
+    print("      - Normal / Benign Baseline (Class 0):       1,611,619 events (91.95%)")
+    print("      - Remote Services Lateral Movement (Class 1): 110,710 events (6.32%)")
+    print("      - Hashing Techniques Lateral Movement (Class 2): 30,507 events (1.74%)")
+    print("      - Total Attack Sequences in LMD-2023:         141,217 events")
+    print("  • DARPA OpTC Benchmark (Out-of-Distribution):   1,000 enterprise host events")
+    print("  • Ransomware Behavioral Telemetry (Curated):     5,000 multi-phase trace records")
+    print("      - Pre-Encryption Defenses (T1490, T1562.001, T1083, T1071.001)")
+    print("      - Active Mass Encryption Impact (T1486)")
+    print(f"\n[*] Evaluation Sample Allocation -> LSA: {lsa_count} samples | BPD: {bpd_count} samples")
+
     # 1. Instantiate Pipeline
     pipeline = EdgeShieldPipeline()
     
     # 2. Load Datasets
     print("\n[*] [1/5] Loading and Partitioning Datasets...")
-    lsa_train, lsa_test = load_edgeshield_lsa_data(num_samples=args.samples)
-    bpd_train, bpd_test = load_edgeshield_bpd_data(num_samples=args.samples)
+    lsa_train, lsa_test = load_edgeshield_lsa_data(test_samples=lsa_count)
+    bpd_train, bpd_test = load_edgeshield_bpd_data(test_samples=bpd_count)
     
     print(f"  [+] LSA Stream Samples: {len(lsa_test)} test records (LMD-2023 / OpTC)")
     print(f"  [+] BPD Stream Samples: {len(bpd_test)} test records (Ransomware Behavioral Traces)")
@@ -74,13 +97,15 @@ def main():
     # 3. Evaluate LSA Stream
     print("\n[*] [2/5] Benchmarking Stream A: Log Semantic Analyzer (LSA)...")
     lsa_preds, lsa_actuals, lsa_latencies = [], [], []
-    for item in lsa_test:
+    for idx, item in enumerate(lsa_test):
         res = pipeline.lsa.analyze_window(item["formatted_text"])
         lsa_latencies.append(res["latency_ms"])
         pred_bin = 1 if res["is_lateral_movement"] else 0
         actual_bin = 1 if item["label"] in (1, 2) else 0
         lsa_preds.append(pred_bin)
         lsa_actuals.append(actual_bin)
+        if (idx + 1) % 200 == 0 or (idx + 1) == len(lsa_test):
+            print(f"    -> LSA Evaluated: {idx + 1}/{len(lsa_test)} records...", flush=True)
         
     lsa_acc = accuracy_score(lsa_actuals, lsa_preds) * 100
     lsa_p, lsa_r, lsa_f1, _ = precision_recall_fscore_support(lsa_actuals, lsa_preds, average="macro", zero_division=0)
@@ -92,15 +117,17 @@ def main():
     lsa_avg_latency = float(np.mean(lsa_latencies))
     
     # 4. Evaluate BPD Stream
-    print("[*] [3/5] Benchmarking Stream B: Behavioral Pattern Detector (BPD)...")
+    print("\n[*] [3/5] Benchmarking Stream B: Behavioral Pattern Detector (BPD)...")
     bpd_preds, bpd_actuals, bpd_latencies = [], [], []
-    for item in bpd_test:
+    for idx, item in enumerate(bpd_test):
         res = pipeline.bpd.analyze_behavior_window(item["formatted_text"])
         bpd_latencies.append(res["latency_ms"])
         pred_bin = 1 if (res["pre_encryption_alert"] or res["encryption_active"]) else 0
         actual_bin = 0 if item["label"] == TECHNIQUE_TO_ID.get("BENIGN_NORMAL", 0) else 1
         bpd_preds.append(pred_bin)
         bpd_actuals.append(actual_bin)
+        if (idx + 1) % 200 == 0 or (idx + 1) == len(bpd_test):
+            print(f"    -> BPD Evaluated: {idx + 1}/{len(bpd_test)} records...", flush=True)
         
     bpd_acc = accuracy_score(bpd_actuals, bpd_preds) * 100
     bpd_p, bpd_r, bpd_f1, _ = precision_recall_fscore_support(bpd_actuals, bpd_preds, average="macro", zero_division=0)

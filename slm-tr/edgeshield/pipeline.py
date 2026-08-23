@@ -20,13 +20,26 @@ class EdgeShieldPipeline:
     """
     def __init__(
         self,
-        lsa_model_path: str = "models/deberta-lateral-movement-v2_sliding_window-stable",
-        bpd_model_path: str = "models/deberta-lateral-movement-v2_sliding_window-stable",
+        lsa_model_path: Optional[str] = None,
+        bpd_model_path: Optional[str] = None,
         bpd_threat_threshold: float = 0.70,
         correlation_window_sec: float = 300.0,
         device: Optional[str] = None
     ):
-        print("[*] Initializing EdgeShield Dual-Stream SLM Architecture...")
+        import os
+        if lsa_model_path is None:
+            if os.path.exists("models/edgeshield_lsa"):
+                lsa_model_path = "models/edgeshield_lsa"
+            else:
+                lsa_model_path = "models/deberta-lateral-movement-v2_sliding_window-stable"
+
+        if bpd_model_path is None:
+            if os.path.exists("models/edgeshield_bpd"):
+                bpd_model_path = "models/edgeshield_bpd"
+            else:
+                bpd_model_path = "models/deberta-lateral-movement-v2_sliding_window-stable"
+
+        print(f"[*] Initializing EdgeShield Dual-Stream SLM Architecture (LSA: {lsa_model_path} | BPD: {bpd_model_path})...")
         self.lsa = LogSemanticAnalyzer(model_name_or_path=lsa_model_path, device=device)
         self.bpd = BehavioralPatternDetector(model_name_or_path=bpd_model_path, threat_threshold=bpd_threat_threshold, device=device)
         self.correlator = AttackCorrelationEngine(correlation_window_sec=correlation_window_sec)

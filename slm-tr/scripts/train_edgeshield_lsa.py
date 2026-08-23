@@ -11,6 +11,13 @@ import time
 import json
 import torch
 import torch.nn as nn
+
+# Maximize multi-threaded performance across all CPU cores (Intel Core Ultra 7 255H - 16 Cores)
+cpu_cores = os.cpu_count() or 16
+torch.set_num_threads(cpu_cores)
+os.environ["OMP_NUM_THREADS"] = str(cpu_cores)
+os.environ["MKL_NUM_THREADS"] = str(cpu_cores)
+
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 
@@ -22,14 +29,17 @@ from edgeshield.data.loader import load_edgeshield_lsa_data
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train EdgeShield Log Semantic Analyzer (LSA)")
-    parser.add_argument("--model_name", type=str, default="microsoft/deberta-v3-small", help="Base SLM model identifier")
+    parser.add_argument("--model_name", type=str, default="distilbert-base-uncased", help="Base SLM model identifier")
     parser.add_argument("--dataset_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to telemetry dataset")
     parser.add_argument("--output_dir", type=str, default="models/edgeshield_lsa", help="Directory to save trained weights")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16, help="Training batch size")
-    parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate")
-    parser.add_argument("--num_samples", type=int, default=2000, help="Number of samples to train on")
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
+    parser.add_argument("--num_samples", type=int, default=12000, help="Number of samples to train on")
+    parser.add_argument("--test_samples", type=int, default=2000, help="Number of test samples to evaluate on")
+    parser.add_argument("--max_length", type=int, default=256, help="Maximum sequence length")
     parser.add_argument("--use_contrastive", action="store_true", default=True, help="Enable Phase 2 Contrastive Loss")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "dml", "cpu"], help="Hardware device")
     return parser.parse_args()
 
 def main():
@@ -38,12 +48,44 @@ def main():
     print("      [+] EDGESHIELD: LOG SEMANTIC ANALYZER (LSA) TRAINING PIPELINE      ")
     print("=" * 80)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[*] Target Hardware Device: {device.upper()}")
+    if args.device == "auto":
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            device_name = f"NVIDIA CUDA ({torch.cuda.get_device_name(0)})"
+        else:
+            try:
+                import torch_directml
+                if torch_directml.is_available() and torch_directml.device_count() > 0:
+                    device = torch_directml.device(0)
+                    dml_name = torch_directml.device_name(0).strip()
+                    device_name = f"DirectML GPU ({dml_name})"
+                else:
+                    device = torch.device("cpu")
+                    device_name = f"CPU ({cpu_cores} Cores)"
+            except Exception:
+                device = torch.device("cpu")
+                device_name = f"CPU ({cpu_cores} Cores)"
+    elif args.device == "dml":
+        import torch_directml
+        device = torch_directml.device(0)
+        dml_name = torch_directml.device_name(0).strip()
+        device_name = f"DirectML GPU ({dml_name})"
+    elif args.device == "cuda":
+        device = torch.device("cuda")
+        device_name = f"NVIDIA CUDA ({torch.cuda.get_device_name(0)})"
+    else:
+        device = torch.device("cpu")
+        device_name = f"CPU ({cpu_cores} Cores)"
+        
+    print(f"[*] Target Hardware Device: {device_name}", flush=True)
     
     # 1. Load Data
     print(f"[*] Loading telemetry data from {args.dataset_path}...")
-    train_ds, test_ds = load_edgeshield_lsa_data(csv_path=args.dataset_path, num_samples=args.num_samples)
+    train_ds, test_ds = load_edgeshield_lsa_data(
+        csv_path=args.dataset_path, 
+        train_samples=args.num_samples, 
+        test_samples=args.test_samples
+    )
     print(f"[+] Loaded {len(train_ds)} train samples, {len(test_ds)} test samples.")
     
     # 2. Tokenizer & Model
@@ -51,32 +93,58 @@ def main():
     try:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=True)
     except Exception:
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-small", use_fast=True)
+        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", use_fast=True)
         
     num_labels = len(TECHNIQUE_TO_ID)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "microsoft/deberta-v3-small", 
-        num_labels=num_labels,
-        ignore_mismatched_sizes=True
-    ).to(device)
+    try:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.model_name, 
+            num_labels=num_labels,
+            ignore_mismatched_sizes=True
+        ).to(device)
+    except Exception:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "distilbert-base-uncased", 
+            num_labels=num_labels,
+            ignore_mismatched_sizes=True
+        ).to(device)
     
-    # Tokenize dataset
+    # Dynamic tokenization and batch padding
     def tokenize_fn(batch):
-        return tokenizer(batch["formatted_text"], truncation=True, max_length=512, padding="max_length")
+        return tokenizer(batch["formatted_text"], truncation=True, max_length=args.max_length)
         
     train_tokenized = train_ds.map(tokenize_fn, batched=True)
-    train_tokenized.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    test_tokenized = test_ds.map(tokenize_fn, batched=True)
     
-    train_loader = DataLoader(train_tokenized, batch_size=args.batch_size, shuffle=True)
+    def collate_fn(batch):
+        input_ids = [torch.tensor(item["input_ids"]) for item in batch]
+        attention_mask = [torch.tensor(item["attention_mask"]) for item in batch]
+        labels = torch.tensor([item["label"] for item in batch], dtype=torch.long)
+        
+        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+        padded_inputs = torch.nn.utils.rnn.pad_sequence(input_ids, batch_first=True, padding_value=pad_id)
+        padded_mask = torch.nn.utils.rnn.pad_sequence(attention_mask, batch_first=True, padding_value=0)
+        return {
+            "input_ids": padded_inputs,
+            "attention_mask": padded_mask,
+            "labels": labels
+        }
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    train_loader = DataLoader(
+        train_tokenized, 
+        batch_size=args.batch_size, 
+        shuffle=True, 
+        collate_fn=collate_fn
+    )
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01, foreach=False)
     total_steps = len(train_loader) * args.epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(total_steps * 0.1), num_training_steps=total_steps)
     
     ce_loss_fn = nn.CrossEntropyLoss()
     contrastive_fn = SupervisedContrastiveLoss(temperature=0.07) if args.use_contrastive else None
     
-    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps)...")
+    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps)...", flush=True)
     model.train()
     start_time = time.time()
     
@@ -87,7 +155,7 @@ def main():
             step += 1
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            labels = batch["label"].to(device)
+            labels = batch["labels"].to(device)
             
             optimizer.zero_grad()
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
@@ -109,15 +177,15 @@ def main():
             
             epoch_loss += total_loss.item()
             
-            if step % 20 == 0 or step == total_steps:
-                print(f"  [Epoch {epoch}/{args.epochs} | Step {step}/{total_steps}] Loss: {total_loss.item():.4f} | LR: {scheduler.get_last_lr()[0]:.2e}")
+            if step % 10 == 0 or step == total_steps:
+                print(f"  [Epoch {epoch}/{args.epochs} | Step {step}/{total_steps}] Loss: {total_loss.item():.4f} | LR: {scheduler.get_last_lr()[0]:.2e}", flush=True)
 
     elapsed = time.time() - start_time
-    print(f"[+] LSA Training finished in {elapsed:.2f} seconds.")
+    print(f"[+] LSA Training finished in {elapsed:.2f} seconds.", flush=True)
     
     # Save Model Checkpoint
     os.makedirs(args.output_dir, exist_ok=True)
-    model.save_pretrained(args.output_dir)
+    model.cpu().save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"[+] Model checkpoint and tokenizer saved to: {args.output_dir}")
 

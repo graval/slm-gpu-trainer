@@ -208,45 +208,38 @@ class LogSemanticAnalyzer:
         
         lower_text = formatted_text.lower()
 
-        # Handle 3-class model (0: Normal, 1: EoRS, 2: EoHT)
-        if num_classes == 3:
-            if pred_id == 1:
-                is_lm = True
-                confidence = float(probs[1])
-                # Subtype resolution
-                if "psexec" in lower_text or "\\pipe\\psexec" in lower_text or "psexesvc" in lower_text:
-                    pred_technique = "T1021.002"
-                elif "wmic" in lower_text or "wmiprvse" in lower_text:
-                    pred_technique = "T1047"
-                elif "winrm" in lower_text or "wsmprovhost" in lower_text:
-                    pred_technique = "T1021.006"
-                elif "schtasks" in lower_text:
-                    pred_technique = "T1053.005"
-                elif "sc.exe" in lower_text or "sc create" in lower_text:
-                    pred_technique = "T1543.003"
-                else:
-                    pred_technique = "T1021.002"
-            elif pred_id == 2:
-                is_lm = True
-                confidence = float(probs[2])
-                if "pth" in lower_text or "sekurlsa" in lower_text or "mimikatz" in lower_text:
-                    pred_technique = "T1550.002"
-                elif "lsass" in lower_text or "comsvcs" in lower_text or "minidump" in lower_text:
-                    pred_technique = "T1003.001"
-                elif "kerberos" in lower_text or "rubeus" in lower_text:
-                    pred_technique = "T1558"
-                else:
-                    pred_technique = "T1550.002"
+        # Handle classification predictions (0: Normal, 1: EoRS, 2: EoHT)
+        if pred_id == 1:
+            is_lm = True
+            confidence = float(probs[1]) if len(probs) > 1 else 0.95
+            # Subtype resolution
+            if "psexec" in lower_text or "\\pipe\\psexec" in lower_text or "psexesvc" in lower_text:
+                pred_technique = "T1021.002"
+            elif "wmic" in lower_text or "wmiprvse" in lower_text:
+                pred_technique = "T1047"
+            elif "winrm" in lower_text or "wsmprovhost" in lower_text:
+                pred_technique = "T1021.006"
+            elif "schtasks" in lower_text:
+                pred_technique = "T1053.005"
+            elif "sc.exe" in lower_text or "sc create" in lower_text:
+                pred_technique = "T1543.003"
             else:
-                is_lm = False
-                confidence = float(probs[0])
-                pred_technique = "BENIGN_NORMAL"
+                pred_technique = "T1021.002"
+        elif pred_id == 2:
+            is_lm = True
+            confidence = float(probs[2]) if len(probs) > 2 else 0.95
+            if "pth" in lower_text or "sekurlsa" in lower_text or "mimikatz" in lower_text:
+                pred_technique = "T1550.002"
+            elif "lsass" in lower_text or "comsvcs" in lower_text or "minidump" in lower_text:
+                pred_technique = "T1003.001"
+            elif "kerberos" in lower_text or "rubeus" in lower_text:
+                pred_technique = "T1558"
+            else:
+                pred_technique = "T1550.002"
         else:
-            # Multi-class output
-            pred_technique = ID_TO_TECHNIQUE.get(pred_id, "T1021.002")
-            confidence = float(probs[pred_id]) if pred_id < len(probs) else 0.50
-            tech_meta = self.knowledge_graph.get_technique_info(pred_technique)
-            is_lm = tech_meta.get("category") == "lateral_movement" and pred_technique != "BENIGN_NORMAL"
+            is_lm = False
+            confidence = float(probs[0]) if len(probs) > 0 else 0.99
+            pred_technique = "BENIGN_NORMAL"
 
         # Heuristic fallback / calibration if model is untrained base
         lower_text = formatted_text.lower()

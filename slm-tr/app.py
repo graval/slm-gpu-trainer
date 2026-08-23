@@ -126,8 +126,10 @@ edgeshield_graph = AttackKnowledgeGraph()
 # Helper to find all available progress JSON files
 def get_all_progress_candidates():
     candidates = [
-        "external/training_progress.json",
         "training_progress.json",
+        "models/edgeshield_bpd/training_progress.json",
+        "models/edgeshield_lsa/training_progress.json",
+        "external/training_progress.json",
         "models/deberta-lateral-movement-v2_sliding_window-stable/training_progress.json",
         "models/deberta-lateral-movement-v1_single_entry-stable/training_progress.json",
         "models/deberta-lateral-movement-v2_sliding_window/training_progress.json",
@@ -1071,7 +1073,7 @@ elif "🚀 Live Training Monitor" in page:
                 
             # Progress bar and metrics
             curr_step = progress_data.get("current_step", 0)
-            max_steps = progress_data.get("max_steps", 100)
+            max_steps = progress_data.get("max_steps") or progress_data.get("total_steps", 100)
             pct = min(1.0, max(0.0, curr_step / max(1, max_steps)))
             
             st.progress(pct)
@@ -1080,7 +1082,8 @@ elif "🚀 Live Training Monitor" in page:
             with m_col1:
                 st.metric("Global Step", f"{curr_step:,} / {max_steps:,}", f"{pct*100:.1f}%")
             with m_col2:
-                st.metric("Current Epoch", f"{progress_data.get('epoch', 0.0):.2f}")
+                epoch_val = progress_data.get('epoch') or progress_data.get('current_epoch', 0.0)
+                st.metric("Current Epoch", f"{float(epoch_val):.2f}" if isinstance(epoch_val, (int, float)) else str(epoch_val))
             with m_col3:
                 st.metric("Current Loss", f"{progress_data.get('loss', 0.0):.4f}")
             with m_col4:

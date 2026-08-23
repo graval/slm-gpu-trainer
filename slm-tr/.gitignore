@@ -33,6 +33,7 @@ external/base_models/
 external/*.log
 *.log
 evaluation_summary.json
+training_progress.json
 scratch/
 
 

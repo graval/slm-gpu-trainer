@@ -222,40 +222,21 @@ class BehavioralPatternDetector:
             else:
                 raw_score = 0.35
 
-        # Heuristic calibration for high-fidelity security patterns
-        lower = formatted_text.lower()
-        detected_technique = "BENIGN_NORMAL"
-        is_pre_encryption = False
-        is_encryption_active = False
+            if hasattr(outputs, "logits") and outputs.logits is not None:
+                pred_cls = int(torch.argmax(outputs.logits[0], dim=-1).cpu().item())
+            else:
+                pred_cls = 0
 
-        if "vssadmin" in lower and "delete" in lower and "shadows" in lower:
-            raw_score = max(raw_score, 0.96)
-            detected_technique = "T1490"
-            is_pre_encryption = True
-        elif "wmic" in lower and "shadowcopy" in lower and "delete" in lower:
-            raw_score = max(raw_score, 0.94)
-            detected_technique = "T1490"
-            is_pre_encryption = True
-        elif "bcdedit" in lower and "recoveryenabled" in lower:
-            raw_score = max(raw_score, 0.92)
-            detected_technique = "T1490"
-            is_pre_encryption = True
-        elif "findfirstfile" in lower or "getlogicaldrivestrings" in lower or "rapid recursive traversal" in lower:
-            raw_score = max(raw_score, 0.78)
-            detected_technique = "T1083"
-            is_pre_encryption = True
-        elif "sc stop windefend" in lower or "disablerealtimemonitoring" in lower or "fltmc unload" in lower:
-            raw_score = max(raw_score, 0.93)
-            detected_technique = "T1562.001"
-            is_pre_encryption = True
-        elif ".locked" in lower or ".ransom" in lower or "cryptencrypt" in lower or "readme.txt" in lower:
-            raw_score = max(raw_score, 0.98)
-            detected_technique = "T1486"
-            is_encryption_active = True
-        elif "c2 beaconing" in lower or "rclone" in lower or "upload" in lower:
-            raw_score = max(raw_score, 0.82)
-            detected_technique = "T1071.001"
-            is_pre_encryption = True
+        # Map predicted class from fine-tuned BPD backbone
+        detected_technique = ID_TO_TECHNIQUE.get(pred_cls, "BENIGN_NORMAL")
+        
+        is_pre_encryption = detected_technique in ("T1083", "T1562.001", "T1490", "T1071.001")
+        is_encryption_active = (detected_technique == "T1486")
+        
+        if detected_technique != "BENIGN_NORMAL":
+            raw_score = max(raw_score, 0.85 if is_pre_encryption else 0.98)
+        else:
+            raw_score = min(raw_score, 0.15)
 
         threat_score = round(float(raw_score), 4)
         self.recent_threat_scores.append(threat_score)
