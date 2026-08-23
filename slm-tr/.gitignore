@@ -39,6 +39,7 @@ scratch/
 # Large local datasets (keep samples in data/ if needed)
 Lateral-Movement-Dataset--LMD_Collections/
 *.zip
+*.docx
 data/*.json
 data/*.csv
 external/*.csv
