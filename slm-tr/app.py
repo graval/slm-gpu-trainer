@@ -786,24 +786,51 @@ elif "🚀 Live Training Monitor" in page:
     </style>
     """, unsafe_allow_html=True)
     
-    progress_file = "external/training_progress.json"
+    import glob
+    progress_candidates = [
+        "external/training_progress.json",
+        "training_progress.json",
+        "models/deberta-lateral-movement-v1_single_entry/training_progress.json",
+        "models/deberta-lateral-movement-v2_sliding_window/training_progress.json",
+        "models/deberta-lateral-movement/training_progress.json",
+        "models/qwen-lateral-movement-v1_single_entry/training_progress.json",
+        "models/qwen-lateral-movement-v2_sliding_window/training_progress.json",
+        "models/qwen-lateral-movement/training_progress.json",
+        "models/phi3-lateral-movement-v1_single_entry/training_progress.json",
+        "models/phi3-lateral-movement-v2_sliding_window/training_progress.json",
+        "models/phi3-lateral-movement-v1/training_progress.json",
+        "models/phi3-lateral-movement-v2/training_progress.json"
+    ]
+    progress_candidates.extend(glob.glob("external/trainedoutput/*/training_progress.json"))
+    progress_candidates.extend(glob.glob("models/*/training_progress.json"))
     
-    # Check if progress file exists
-    if os.path.exists(progress_file):
+    valid_prog_candidates = [c for c in set(progress_candidates) if os.path.exists(c)]
+    valid_prog_candidates.sort(key=os.path.getmtime, reverse=True)
+
+    progress_data = None
+    progress_file = None
+    
+    for p_cand in valid_prog_candidates:
         try:
-            with open(progress_file, "r") as f:
-                progress_data = json.load(f)
-        except Exception as e:
-            progress_data = None
-    else:
-        progress_data = None
+            with open(p_cand, "r") as f:
+                p_data = json.load(f)
+            if isinstance(p_data, dict) and "status" in p_data:
+                if progress_data is None:
+                    progress_data = p_data
+                    progress_file = p_cand
+                if p_data.get("status") == "training":
+                    progress_data = p_data
+                    progress_file = p_cand
+                    break
+        except Exception:
+            pass
 
     if progress_data is not None:
         status = progress_data.get("status", "unknown")
         
         # Check if the training is stalled/crashed
         is_stalled = False
-        if status == "training":
+        if status == "training" and progress_file:
             file_mod_time = os.path.getmtime(progress_file)
             import time
             curr_step = progress_data.get("current_step", 0)
@@ -875,7 +902,7 @@ elif "🚀 Live Training Monitor" in page:
                 v_label = progress_data.get("variant_label") or ("v1 - Single Entry (K=1, Stateless)" if progress_data.get("window_size") == 1 else "v2 - Sliding Window (K=3, Temporal Sequence)")
                 w_size = progress_data.get("window_size", 1 if "v1" in v_label else 3)
                 max_len = progress_data.get("max_length", 128 if "v1" in v_label else 256)
-                out_dir = progress_data.get("output_dir", live_progress_file or "models/")
+                out_dir = progress_data.get("output_dir", progress_file or "models/")
                 
                 st.markdown(f"""
                 <div class="card" style="border-left: 5px solid #10b981; padding: 15px; margin-bottom: 15px;">
@@ -1056,10 +1083,15 @@ elif "🚀 Live Training Monitor" in page:
             col_reset_btn, col_reset_text = st.columns([1, 4])
             with col_reset_btn:
                 if st.button("🔄 Reset Monitor"):
-                    if os.path.exists(progress_file):
+                    if progress_file and os.path.exists(progress_file):
                         try:
                             os.remove(progress_file)
                         except Exception as e:
+                            pass
+                    if os.path.exists("external/training_progress.json"):
+                        try:
+                            os.remove("external/training_progress.json")
+                        except Exception:
                             pass
                     st.rerun()
             with col_reset_text:
