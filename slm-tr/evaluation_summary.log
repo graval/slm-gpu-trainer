@@ -65,3 +65,111 @@ Fine-Tuned Weight:   models/phi3-lateral-movement
    - Loss Reduction Delta:      -2.26
    - Dynamic INT8 Quantization: Success (No precision degradation detected)
 ======================================================================
+======================================================================
+TIMESTAMP: 2026-08-19T11:25:25.502007+05:30
+======================================================================
+SLM LATERAL MOVEMENT CLASSIFIER COMPARISON REPORT
+----------------------------------------------------------------------
+Test Partition Size: 999 samples
+Base Model Arch:     distilbert-base-uncased
+Fine-Tuned Weight:   models/deberta-lateral-movement
+
+1. UNTRAINED / RAW MODEL METRICS:
+   - Accuracy:                  33.33%
+   - Macro F1-Score:            0.1667
+   - Macro Precision:           0.1111
+   - Macro Recall:              0.3333
+   - Total False Positives:     333 samples
+   - Total False Negatives:     0 samples
+   - Avg. Inference Latency:    6.85 ms / sample
+   - Total Evaluation Duration: 6.84 seconds
+
+2. FINE-TUNED / UPDATED MODEL METRICS:
+   - Accuracy:                  99.00%
+   - Macro F1-Score:            0.9900
+   - Macro Precision:           0.9901
+   - Macro Recall:              0.9900
+   - Total False Positives:     5 samples
+   - Total False Negatives:     0 samples
+   - Avg. Inference Latency:    5.41 ms / sample
+   - Total Evaluation Duration: 5.40 seconds
+
+3. PERFORMANCE IMPROVEMENT DELTAS:
+   - Accuracy Increase:         +65.67%
+   - F1-Score Improvement:      +0.8233
+   - False Positives Reduced:   328 samples
+   - False Negatives Reduced:   0 samples
+======================================================================
+
+======================================================================
+TIMESTAMP: 2026-08-21T17:21:14.179591+05:30
+======================================================================
+SLM LATERAL MOVEMENT CLASSIFIER COMPARISON REPORT
+----------------------------------------------------------------------
+Test Partition Size: 100 samples
+Base Model Arch:     distilbert-base-uncased
+Fine-Tuned Weight:   models/deberta-lateral-movement
+
+1. UNTRAINED / RAW MODEL METRICS:
+   - Accuracy:                  30.00%
+   - Macro F1-Score:            0.1538
+   - Macro Precision:           0.1000
+   - Macro Recall:              0.3333
+   - Total False Positives:     40 samples
+   - Total False Negatives:     0 samples
+   - Avg. Inference Latency:    31.90 ms / sample
+   - Total Evaluation Duration: 3.19 seconds
+
+2. FINE-TUNED / UPDATED MODEL METRICS:
+   - Accuracy:                  37.00%
+   - Macro F1-Score:            0.2939
+   - Macro Precision:           0.3062
+   - Macro Recall:              0.3306
+   - Total False Positives:     11 samples
+   - Total False Negatives:     39 samples
+   - Avg. Inference Latency:    5.67 ms / sample
+   - Total Evaluation Duration: 0.57 seconds
+
+3. PERFORMANCE IMPROVEMENT DELTAS:
+   - Accuracy Increase:         +7.00%
+   - F1-Score Improvement:      +0.1401
+   - False Positives Reduced:   29 samples
+   - False Negatives Reduced:   -39 samples
+======================================================================
+
+======================================================================
+TIMESTAMP: 2026-08-21T17:21:41.750846+05:30
+======================================================================
+SLM LATERAL MOVEMENT CLASSIFIER COMPARISON REPORT
+----------------------------------------------------------------------
+Test Partition Size: 100 samples
+Base Model Arch:     distilbert-base-uncased
+Fine-Tuned Weight:   models/deberta-lateral-movement
+
+1. UNTRAINED / RAW MODEL METRICS:
+   - Accuracy:                  40.00%
+   - Macro F1-Score:            0.1905
+   - Macro Precision:           0.1333
+   - Macro Recall:              0.3333
+   - Total False Positives:     0 samples
+   - Total False Negatives:     60 samples
+   - Avg. Inference Latency:    17.65 ms / sample
+   - Total Evaluation Duration: 1.77 seconds
+
+2. FINE-TUNED / UPDATED MODEL METRICS:
+   - Accuracy:                  37.00%
+   - Macro F1-Score:            0.2939
+   - Macro Precision:           0.3062
+   - Macro Recall:              0.3306
+   - Total False Positives:     11 samples
+   - Total False Negatives:     39 samples
+   - Avg. Inference Latency:    5.37 ms / sample
+   - Total Evaluation Duration: 0.54 seconds
+
+3. PERFORMANCE IMPROVEMENT DELTAS:
+   - Accuracy Increase:         +-3.00%
+   - F1-Score Improvement:      +0.1034
+   - False Positives Reduced:   -11 samples
+   - False Negatives Reduced:   21 samples
+======================================================================
+

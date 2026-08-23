@@ -29,7 +29,11 @@ Thumbs.db
 models/**/checkpoints/
 external/trainedoutput/
 external/training_progress.json
+external/base_models/
+external/*.log
+*.log
 evaluation_summary.json
+scratch/
 
 
 # Large local datasets (keep samples in data/ if needed)

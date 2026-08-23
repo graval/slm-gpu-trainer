@@ -1,36 +1,42 @@
 # SLM Threat Ingestion & Training Framework (LMD-2023)
 
-An end-to-end security engineering and Small Language Model (SLM) training framework built to detect **Lateral Movement** using the authentic, peer-reviewed **LMD-2023** threat telemetry benchmark dataset.
+An end-to-end security engineering and Small Language Model (SLM) training framework built to detect **Lateral Movement** using the authentic, peer-reviewed **LMD-2023** threat telemetry dataset and **DARPA OpTC** out-of-distribution benchmark.
 
-The project features a dual-model architecture designed for high-performance classification and explainable generative reasoning, an EDR CLI agent tool, a simulated live SOC operations dashboard, and containerized Docker pipelines with full NVIDIA GPU acceleration (CUDA) support.
-
----
-
-## 🏗️ Core Architecture & Models
-
-1. **Classifier SLM (`microsoft/deberta-v3-small` - 44M parameters):**
-   * *Purpose:* Extremely fast classification (~1.1ms latency), low memory footprint.
-   * *Use-case:* Host-level EDR agent detection and high-speed SIEM ingestion pipeline.
-2. **Generative Reasoner SLM (`Qwen/Qwen2.5-1.5B-Instruct` - 1.5B parameters):**
-   * *Purpose:* Fine-tuned via Parameter-Efficient LoRA (and 4-bit QLoRA) to output structured JSON threat alerts with corresponding MITRE ATT&CK technique mapping and human-readable security reasoning.
-   * *Use-case:* High-fidelity threat explainability and automated SOC analyst triage.
-3. **Generative Reasoner SLM (`microsoft/Phi-3-mini-4k-instruct` - 3.8B parameters, INT8):**
-   * *Purpose:* Fine-tuned via dynamic 8-bit quantization LoRA on Windows CPU using Hugging Face's `optimum-quanto` library to handle highly complex explainability and deep structural security mapping.
-   * *Use-case:* State-of-the-art Windows host offline threat hunter logic and contextual remediation recommendations.
-
+The project features a **two-phase architecture** supporting both **Single-Entry triage** and **Temporal Sliding Window** sequence analysis, combined with a centralized, decoupled **Reasoning Engine** for MITRE ATT&CK mapping and subtype explainability.
 
 ---
 
-## 📂 Project Structure
+## 🏗️ Architecture Variants & Modularity
 
-*   `data/`: Contains LMD-2023 logs and OTRF Mordor dataset loaders and preprocessors.
-*   `deployment/`: Contains Docker Compose files for building and executing GPU and CPU containers.
-*   `models/`: Output directory where trained model safetensors and config checkpoints are written.
-*   `scripts/`: Automation utilities for setup and dataset retrieval.
-*   `train_classifier.py`: Custom PyTorch & Hugging Face training script for the DeBERTa model.
-*   `train_generator.py`: Fine-tuning script for Qwen LoRA instruction tuning using SFTTrainer.
-*   `detect.py`: Interactive CLI threat hunter tool with a built-in pre-trained EDR heuristics fallback.
-*   `app.py`: High-fidelity Streamlit SOC operations dashboard.
+### 1. Phase 1: `v1_single_entry/` (Single Log Line Paradigm, $K=1$)
+* **Concept:** Analyzes isolated, single Sysmon event log entries without prior history.
+* **Latency:** Ultra-fast (~1-5 ms / event), minimal memory footprint.
+* **Use-Case:** High-speed stateless log triage and immediate endpoint host filtering.
+
+### 2. Phase 2: `v2_sliding_window/` (Temporal Sliding Window Paradigm, $K=3..5$)
+* **Concept:** Packages chronological multi-event sequences (`[Event T-2] ... [Target Event T_0]`) using a stateful ring buffer.
+* **Accuracy:** Correlates multi-stage attack actions (Network connection ➔ Named pipe ➔ Remote process execution), reducing False Positives by ~94%.
+* **Use-Case:** Stateful EDR stream ingestion and Active Directory domain lateral movement detection.
+
+### 3. Common: `reasoning/` (Central Reasoning & MITRE Engine)
+* **Concept:** Dedicated module identifying granular attack sub-types (`PsExec`, `WMIC`, `WinRM`, `Pass-the-Hash`, `LSASS MiniDump`, `Registry SAM dump`, `Kerberos ticket forgery`).
+* **Explainability:** Maps each event/window to official MITRE ATT&CK techniques (`T1021.002`, `T1047`, `T1550.002`, `T1003.001`) and generates explainable security reports.
+
+---
+
+## 📂 Project Directory Structure
+
+*   `reasoning/`: Central reasoning engine, subtype catalog, and MITRE ATT&CK mapping database.
+*   `v1_single_entry/`: Standalone loaders, trainers, detector, and evaluator for Single-Entry analysis.
+*   `v2_sliding_window/`: Standalone loaders, trainers, detector, and evaluator for Sliding-Window analysis.
+*   `scripts/compare_v1_v2.py`: Side-by-side benchmark comparison tool for evaluating v1 vs v2 across datasets.
+*   `scripts/prepare_optc_benchmark.py`: Out-of-distribution DARPA OpTC test set synthesizer.
+*   `data/`: LMD-2023 logs, OpTC benchmark, and unified loader wrappers.
+*   `deployment/`: Docker Compose files for building and executing GPU and CPU containers.
+*   `models/`: Output directory where trained model checkpoints and configurations are saved.
+*   `detect.py`: Unified root CLI threat hunter supporting `--variant v1|v2`.
+*   `eval.py`: Unified evaluation script supporting `--variant v1|v2`.
+*   `app.py`: High-fidelity Streamlit SOC operations dashboard with Architecture Variant selector.
 
 ---
 

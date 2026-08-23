@@ -27,9 +27,10 @@ from trl import SFTTrainer, SFTConfig
 from data.loader import load_lmd_for_decoder
 
 class ProgressCallback(TrainerCallback):
-    def __init__(self, output_dir, model_name):
+    def __init__(self, output_dir, model_name, extra_meta=None):
         self.output_dir = output_dir
         self.model_name = model_name
+        self.extra_meta = extra_meta or {}
         self.start_time = time.time()
         self.history = []
         
@@ -52,6 +53,7 @@ class ProgressCallback(TrainerCallback):
             "eta_seconds": 0.0,
             "history": []
         }
+        initial_progress.update(self.extra_meta)
         self._save_progress(initial_progress)
 
 
@@ -92,7 +94,7 @@ class ProgressCallback(TrainerCallback):
                 "eta_seconds": round(eta_seconds, 2),
                 "history": self.history
             }
-            
+            progress.update(self.extra_meta)
             self._save_progress(progress)
             
     def on_train_end(self, args, state, control, **kwargs):
@@ -110,6 +112,7 @@ class ProgressCallback(TrainerCallback):
                 "eta_seconds": 0.0,
                 "history": self.history
             }
+            progress.update(self.extra_meta)
             self._save_progress(progress)
             
     def _save_progress(self, progress):
@@ -132,6 +135,7 @@ def parse_args():
     parser.add_argument("--csv_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-1.5B-Instruct", help="Base decoder model")
     parser.add_argument("--output_dir", type=str, default="models/qwen-lateral-movement", help="Where to save the LoRA weights")
+    parser.add_argument("--variant", type=str, default=None, choices=["v1", "v2", "v1_single_entry", "v2_sliding_window"], help="Architectural variant approach")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4, help="Gradient accumulation steps")
@@ -140,7 +144,21 @@ def parse_args():
     parser.add_argument("--int8", action="store_true", default=False, help="Use 8-bit quantization (Quanto for CPU / BitsAndBytes for GPU)")
     parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
     parser.add_argument("--max_length", type=int, default=512, help="Maximum token sequence length (default: 512)")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Determine architectural approach suffix
+    if args.variant:
+        suffix = "v1_single_entry" if "v1" in args.variant else "v2_sliding_window"
+        if "v1" in args.variant:
+            args.window_size = 1
+    else:
+        suffix = "v1_single_entry" if args.window_size == 1 else "v2_sliding_window"
+
+    # Append approach suffix if not already present
+    if not (args.output_dir.endswith("v1_single_entry") or args.output_dir.endswith("v2_sliding_window")):
+        args.output_dir = f"{args.output_dir.rstrip('/')}-{suffix}"
+
+    return args
 
 def profile_generator_speed(model, tokenizer, device):
     """Profiles the Qwen LoRA training speed (seconds per sample) on the active device."""
@@ -254,10 +272,21 @@ def calibrate_generator_dataset_size(model, tokenizer, train_dataset, val_datase
 def main():
     args = parse_args()
     
+    from v1_single_entry.data_loader import resolve_dataset_path
+    args.csv_path = resolve_dataset_path(args.csv_path)
+
     # Immediately initialize the progress telemetry to signal starting a new active run
+    variant_tag = "v1_single_entry" if args.window_size == 1 else "v2_sliding_window"
+    variant_label = "v1 - Single Entry (K=1, Stateless)" if args.window_size == 1 else f"v2 - Sliding Window (K={args.window_size}, Temporal Sequence)"
+
     try:
         initial_progress = {
-            "model_name": f"Qwen LoRA Generator ({args.model_name})",
+            "model_name": f"Generative Reasoner ({args.model_name})",
+            "variant": variant_tag,
+            "variant_label": variant_label,
+            "window_size": args.window_size,
+            "max_length": args.max_length,
+            "output_dir": args.output_dir,
             "status": "training",
             "current_step": 0,
             "max_steps": 100,
@@ -390,7 +419,19 @@ def main():
     )
     
     print("\n[*] Initializing Supervised Fine-Tuning Trainer (trl.SFTTrainer)...")
-    progress_callback = ProgressCallback(args.output_dir, f"Qwen LoRA Generator ({args.model_name})")
+    variant_tag = "v1_single_entry" if args.window_size == 1 else "v2_sliding_window"
+    variant_label = "v1 - Single Entry (K=1, Stateless)" if args.window_size == 1 else f"v2 - Sliding Window (K={args.window_size}, Temporal Sequence)"
+    progress_callback = ProgressCallback(
+        args.output_dir, 
+        f"Generative Reasoner ({args.model_name})",
+        extra_meta={
+            "variant": variant_tag,
+            "variant_label": variant_label,
+            "window_size": args.window_size,
+            "max_length": args.max_length,
+            "output_dir": args.output_dir
+        }
+    )
     trainer = SFTTrainer(
         model=model,
         args=training_args,

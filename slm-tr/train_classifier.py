@@ -35,10 +35,11 @@ from data.loader import load_lmd_dataset
 
 class ProgressTracker:
     """Unified telemetry and progress tracker for both Hugging Face Trainer and DirectML native loops."""
-    def __init__(self, output_dir, model_name, max_steps):
+    def __init__(self, output_dir, model_name, max_steps, extra_meta=None):
         self.output_dir = output_dir
         self.model_name = model_name
         self.max_steps = max_steps
+        self.extra_meta = extra_meta or {}
         self.start_time = time.time()
         self.history = []
         self.progress_file = os.path.join(output_dir, "training_progress.json")
@@ -56,6 +57,7 @@ class ProgressTracker:
             "eta_seconds": 0.0,
             "history": []
         }
+        initial_progress.update(self.extra_meta)
         self.save_progress(initial_progress)
         
     def update(self, step, epoch, loss, lr):
@@ -87,6 +89,7 @@ class ProgressTracker:
             "eta_seconds": round(eta_seconds, 2),
             "history": self.history
         }
+        progress.update(self.extra_meta)
         self.save_progress(progress)
         
     def complete(self, step, epoch, final_loss=0.0):
@@ -103,6 +106,7 @@ class ProgressTracker:
             "eta_seconds": 0.0,
             "history": self.history
         }
+        progress.update(self.extra_meta)
         self.save_progress(progress)
         
     def save_progress(self, progress):
@@ -141,6 +145,7 @@ def parse_args():
     parser.add_argument("--csv_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to the LMD-2023 CSV file")
     parser.add_argument("--model_name", type=str, default="auto", help="Base model: 'auto', 'distilbert-base-uncased', 'roberta-base', or 'microsoft/deberta-v3-small'")
     parser.add_argument("--output_dir", type=str, default="models/deberta-lateral-movement", help="Where to save the trained model")
+    parser.add_argument("--variant", type=str, default=None, choices=["v1", "v2", "v1_single_entry", "v2_sliding_window"], help="Architectural variant approach")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "dml", "cuda", "cpu"], help="Hardware device: auto, dml (Intel Arc GPU via DirectML), cuda, cpu")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
@@ -149,7 +154,21 @@ def parse_args():
     parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
     parser.add_argument("--max_length", type=int, default=128, help="Maximum token length for tokenizer (default: 128)")
     parser.add_argument("--target_minutes", type=float, default=30.0, help="Target total execution time in minutes on local hardware (default: 30.0)")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Determine architectural approach suffix
+    if args.variant:
+        suffix = "v1_single_entry" if "v1" in args.variant else "v2_sliding_window"
+        if "v1" in args.variant:
+            args.window_size = 1
+    else:
+        suffix = "v1_single_entry" if args.window_size == 1 else "v2_sliding_window"
+
+    # Append approach suffix if not already present
+    if not (args.output_dir.endswith("v1_single_entry") or args.output_dir.endswith("v2_sliding_window")):
+        args.output_dir = f"{args.output_dir.rstrip('/')}-{suffix}"
+
+    return args
 
 def compute_metrics(eval_pred):
     """Computes precision, recall, F1, and accuracy for evaluation."""
@@ -391,6 +410,9 @@ def main():
     print("      [+] HARDWARE-ACCELERATED SLM LATERAL MOVEMENT TRAINING [+]      ")
     print("=" * 70)
     
+    from v1_single_entry.data_loader import resolve_dataset_path
+    args.csv_path = resolve_dataset_path(args.csv_path)
+    
     if not os.path.exists(args.csv_path):
         print(f"[!] Dataset not found at: {args.csv_path}")
         sys.exit(1)
@@ -436,7 +458,20 @@ def main():
     print(f"[*] Base SLM Architecture: {model_name}")
     
     # Initialize Progress Telemetry
-    tracker = ProgressTracker(args.output_dir, f"SLM Classifier ({model_name})", max_steps=100)
+    variant_tag = "v1_single_entry" if args.window_size == 1 else "v2_sliding_window"
+    variant_label = "v1 - Single Entry (K=1, Stateless)" if args.window_size == 1 else f"v2 - Sliding Window (K={args.window_size}, Temporal Sequence)"
+    tracker = ProgressTracker(
+        args.output_dir, 
+        f"SLM Classifier ({model_name})", 
+        max_steps=100,
+        extra_meta={
+            "variant": variant_tag,
+            "variant_label": variant_label,
+            "window_size": args.window_size,
+            "max_length": args.max_length,
+            "output_dir": args.output_dir
+        }
+    )
     
     # Load dataset with temporal sliding window
     try:

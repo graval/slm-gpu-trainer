@@ -1,0 +1,14 @@
+# Cursor Rules for SLM Lateral Movement Detection Repository
+
+# Core Architecture
+- Dual-Model SLM Design: DeBERTa-v3 44M Classifier + Qwen 1.5B / Phi-3 3.8B Generative Reasoner.
+- Operational Variants: v1_single_entry (K=1, stateless) vs v2_sliding_window (K=3..5, stateful temporal buffer).
+- Common Reasoning: Central reasoning logic in `reasoning/` (mitre_kb.py, engine.py, prompt_builder.py).
+
+# Development Guidelines
+- Always use Python interpreter in `.venv/Scripts/python.exe` on Windows.
+- Always load tokenizer from the model checkpoint path before falling back to base model.
+- Always use `resolve_dataset_path()` when loading dataset files.
+- Ensure all model output directories append the approach suffix (`-v1_single_entry` or `-v2_sliding_window`).
+- Use ASCII-safe print statements (`[+]`, `[!]`, `[COMPARISON]`) to avoid Windows CP1252 charmap encoding errors.
+- Refer to `specs/` directory for full specifications and Architectural Decision Records (ADRs).

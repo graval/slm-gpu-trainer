@@ -101,24 +101,31 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 OUTPUT_MOUNT_DIR="${EXTERNAL_DIR}/trainedoutput"
 mkdir -p "$OUTPUT_MOUNT_DIR"
 
-if [ "$CHOICE" = "classifier" ]; then
+    # Detect variant suffix for folder naming
+    VARIANT_SUFFIX="v2_sliding_window"
+    for arg in "$@"; do
+        if [ "$arg" = "v1" ] || [ "$arg" = "v1_single_entry" ] || [ "$arg" = "--window_size=1" ] || [ "$arg" = "--window_size 1" ]; then
+            VARIANT_SUFFIX="v1_single_entry"
+        fi
+    done
+
     # 1. Launch EDR Security Dashboard in the background inside the container
     echo "[*] Launching EDR Security Dashboard in background inside container (Port 8501)..."
     streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /app/streamlit.log 2>&1 &
     
     # 2. Run DeBERTa Classifier Training
-    echo "[*] Starting DeBERTa Classifier training (Full training cycle)..."
-    python train_classifier.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/deberta-lateral-movement" "$@"
+    echo "[*] Starting DeBERTa Classifier training (Variant: ${VARIANT_SUFFIX})..."
+    python train_classifier.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/deberta-lateral-movement-${VARIANT_SUFFIX}" "$@"
     
     # 3. Post-Training Comparative Evaluation/Testing
     echo "[*] Starting post-training comparative evaluation & testing..."
     python evaluate_comparison.py
     
     # 4. Define and copy to timestamped host mount directory
-    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/deberta-lateral-movement-${TIMESTAMP}"
+    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/deberta-lateral-movement-${VARIANT_SUFFIX}-${TIMESTAMP}"
     echo "[*] Copying trained model weights and reports to host mount: ${RUN_FOLDER}"
     mkdir -p "${RUN_FOLDER}"
-    cp -rf /app/models/deberta-lateral-movement/* "${RUN_FOLDER}/"
+    cp -rf /app/models/deberta-lateral-movement-${VARIANT_SUFFIX}/* "${RUN_FOLDER}/"
     
     # Copy evaluation files to both the timestamped folder and the root of external mount
     if [ -f "/app/evaluation_summary.json" ]; then
@@ -130,23 +137,31 @@ if [ "$CHOICE" = "classifier" ]; then
         cp -f "/app/evaluation_summary.log" "${EXTERNAL_DIR}/evaluation_summary.log"
     fi
     
-    echo "[+] SUCCESS: Classifier model and evaluation summary successfully persisted!"
+    echo "[+] SUCCESS: Classifier model (${VARIANT_SUFFIX}) and evaluation summary successfully persisted!"
 
 elif [ "$CHOICE" = "generator" ]; then
+    # Detect variant suffix for folder naming
+    VARIANT_SUFFIX="v2_sliding_window"
+    for arg in "$@"; do
+        if [ "$arg" = "v1" ] || [ "$arg" = "v1_single_entry" ] || [ "$arg" = "--window_size=1" ] || [ "$arg" = "--window_size 1" ]; then
+            VARIANT_SUFFIX="v1_single_entry"
+        fi
+    done
+
     # 1. Launch EDR Security Dashboard in the background inside the container
     echo "[*] Launching EDR Security Dashboard in background inside container (Port 8501)..."
     streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /app/streamlit.log 2>&1 &
     
     # 2. Run Qwen LoRA Generator Training
-    echo "[*] Starting Qwen LoRA Generator training (Full training cycle)..."
-    python train_generator.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/qwen-lateral-movement" "$@"
+    echo "[*] Starting Qwen LoRA Generator training (Variant: ${VARIANT_SUFFIX})..."
+    python train_generator.py --csv_path "$LOCAL_CSV" --output_dir "/app/models/qwen-lateral-movement-${VARIANT_SUFFIX}" "$@"
     
     # 3. Define and copy to timestamped host mount directory
-    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/qwen-lateral-movement-${TIMESTAMP}"
+    RUN_FOLDER="${OUTPUT_MOUNT_DIR}/qwen-lateral-movement-${VARIANT_SUFFIX}-${TIMESTAMP}"
     echo "[*] Copying trained LoRA adapters to host mount: ${RUN_FOLDER}"
     mkdir -p "${RUN_FOLDER}"
-    cp -rf /app/models/qwen-lateral-movement/* "${RUN_FOLDER}/"
-    echo "[+] SUCCESS: LoRA adapters successfully persisted!"
+    cp -rf /app/models/qwen-lateral-movement-${VARIANT_SUFFIX}/* "${RUN_FOLDER}/"
+    echo "[+] SUCCESS: LoRA adapters (${VARIANT_SUFFIX}) successfully persisted!"
 
 elif [ "$CHOICE" = "dashboard" ] || [ "$CHOICE" = "ui" ]; then
     echo "[*] Starting SLM EDR Security Console Dashboard inside container..."
