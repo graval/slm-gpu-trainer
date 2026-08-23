@@ -65,9 +65,16 @@ def main():
     
     active_path = args.base_model if args.is_raw else args.model_path
     if not args.is_raw and not os.path.exists(active_path):
-        cand = f"{active_path}-v1_single_entry"
-        if os.path.exists(cand):
-            active_path = cand
+        for cand in [
+            f"{active_path}-stable",
+            f"{active_path}-v1_single_entry-stable",
+            f"{active_path}-v1_single_entry",
+            "models/deberta-lateral-movement-v1_single_entry-stable",
+            "models/deberta-lateral-movement-v1_single_entry"
+        ]:
+            if os.path.exists(cand):
+                active_path = cand
+                break
     print(f"[*] Loading Tokenizer & Model: {active_path}...")
     
     try:

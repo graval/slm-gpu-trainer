@@ -14,3 +14,4 @@ Welcome to the central specification and context repository for the **SLM Latera
 | [**`04_ARCHITECTURAL_DECISIONS.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/04_ARCHITECTURAL_DECISIONS.md) | Formal **Architecture Decision Records (ADRs)** documenting design trade-offs and rationale. |
 | [**`05_BENCHMARKS_AND_DATASETS.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/05_BENCHMARKS_AND_DATASETS.md) | Dataset schemas, downsampling contracts, and out-of-distribution DARPA OpTC benchmarking. |
 | [**`06_DEV_WORKFLOW_AND_CLI.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/06_DEV_WORKFLOW_AND_CLI.md) | Virtual environment instructions, CLI threat hunting, and model evaluation commands. |
+| [**`07_BENCHMARK_RESULTS.md`**](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/07_BENCHMARK_RESULTS.md) | Verified multi-dataset benchmark results, comparative metrics, and stable model snapshots. |

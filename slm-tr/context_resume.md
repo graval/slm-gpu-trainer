@@ -20,6 +20,9 @@ The project follows a **Specification-Driven System** (Spec-Kit + ADRs) located 
    * Dataset specifications for **LMD-2023** ($>1\text{M}$ events) and **DARPA OpTC** out-of-distribution benchmark.
 6. **[`specs/06_DEV_WORKFLOW_AND_CLI.md`](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/06_DEV_WORKFLOW_AND_CLI.md)**:
    * Execution playbook, `.venv` setup, and test commands.
+7. **[`specs/07_BENCHMARK_RESULTS.md`](file:///c:/workspaceag/slmgpuv1/slm-tr/specs/07_BENCHMARK_RESULTS.md)**:
+   * Stable verified benchmark results: `v1` (97.2% Accuracy, 16.6ms) vs `v2` (99.4% Accuracy, 0.4% FPR).
+   * Stable model snapshot paths: `models/deberta-lateral-movement-v1_single_entry-stable` and `models/deberta-lateral-movement-v2_sliding_window-stable`.
 
 ---
 

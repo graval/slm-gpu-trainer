@@ -112,9 +112,13 @@ def main():
     target_path = args.base_model if args.is_raw else args.model_path
     if not args.is_raw and not os.path.exists(target_path):
         for cand in [
+            f"{target_path}-v2_sliding_window-stable",
             f"{target_path}-v2_sliding_window",
+            f"{target_path}-v1_single_entry-stable",
             f"{target_path}-v1_single_entry",
+            "models/deberta-lateral-movement-v2_sliding_window-stable",
             "models/deberta-lateral-movement-v2_sliding_window",
+            "models/deberta-lateral-movement-v1_single_entry-stable",
             "models/deberta-lateral-movement-v1_single_entry"
         ]:
             if os.path.exists(cand):
