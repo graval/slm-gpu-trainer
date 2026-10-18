@@ -73,18 +73,30 @@ class EdgeDeploymentEngine:
                 out = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
                 return out.logits
 
-        wrapper = OnnxWrapper(pytorch_model).cpu()
+        wrapper = OnnxWrapper(pytorch_model).cpu().float()
 
-        torch.onnx.export(
-            wrapper,
-            (input_ids.cpu(), attention_mask.cpu()),
-            output_path,
-            input_names=["input_ids", "attention_mask"],
-            output_names=["logits"],
-            dynamic_axes=dynamic_axes,
-            opset_version=14,
-            do_constant_folding=True
-        )
+        export_kwargs = {
+            "input_names": ["input_ids", "attention_mask"],
+            "output_names": ["logits"],
+            "dynamic_axes": dynamic_axes,
+            "opset_version": 14,
+            "do_constant_folding": True
+        }
+        try:
+            torch.onnx.export(
+                wrapper,
+                (input_ids.cpu(), attention_mask.cpu()),
+                output_path,
+                dynamo=False,
+                **export_kwargs
+            )
+        except TypeError:
+            torch.onnx.export(
+                wrapper,
+                (input_ids.cpu(), attention_mask.cpu()),
+                output_path,
+                **export_kwargs
+            )
         return output_path
 
     def quantize_int8(self, onnx_model_path: str) -> str:
