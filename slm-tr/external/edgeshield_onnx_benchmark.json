@@ -1,0 +1,17 @@
+{
+  "model": "slm-tr\\models\\onnx_edgeshield\\edgeshield_lsa_int8.onnx",
+  "model_size_mb": 64.51,
+  "providers": [
+    "CPUExecutionProvider"
+  ],
+  "runs": 50,
+  "batch_size": 1,
+  "sequence_length": 128,
+  "mean_ms": 21.55,
+  "median_ms": 17.49,
+  "p95_ms": 47.37,
+  "min_ms": 8.31,
+  "max_ms": 62.55,
+  "std_ms": 12.89,
+  "throughput_per_sec": 46.4
+}

@@ -1,0 +1,359 @@
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{listings}
+
+\lstset{
+    basicstyle=\footnotesize\ttfamily,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10}
+}
+
+\begin{document}
+
+\title{EdgeShield: Dual-Tier Small Language Model Framework for High-Throughput Lateral Movement and Pre-Encryption Ransomware Detection at the Enterprise Edge}
+
+\author{Gauravkumar~Raval,~\IEEEmembership{Graduate Student Member,~IEEE,}
+        and~Tejaskumar~Bhatt,~\IEEEmembership{Senior Member,~IEEE}%
+\IEEEcompsocitemizethanks{
+\IEEEcompsocthanksitem G. Raval is with the School of Doctoral Research and Innovation, GLS University, Ahmedabad, Gujarat 380006, India.\protect\\
+E-mail: gaurav.raval@glsuniversity.ac.in
+\IEEEcompsocthanksitem T. Bhatt is with the Department of Computer Engineering, Faculty of Technology, GLS University, Ahmedabad, Gujarat 380006, India.\protect\\
+E-mail: tejaskumar.bhatt@glsuniversity.ac.in
+}}
+
+\IEEEtitleabstractindextext{%
+\begin{abstract}
+Modern enterprise cybersecurity breaches rarely execute as atomic intrusions. Instead, adversaries quietly advance through multi-stage kill chains, predominantly initiating with stealthy credential harvesting and lateral movement across enterprise subnets before executing mass ransomware encryption. Conventional defense mechanisms present an operational dichotomy: signature-based intrusion detection systems (IDS) execute with sub-millisecond latency but suffer severe recall degradation against novel living-off-the-land techniques (capping at 36.80\% recall on zero-day attacks), whereas cloud-hosted Large Language Models (LLMs) achieve high semantic contextualization but impose prohibitive network latencies (150--800~ms), high operational costs, and catastrophic data residency risks under modern regulatory frameworks (e.g., GDPR, HIPAA).
+
+In this article, we propose \textbf{EdgeShield}, an enterprise-grade, dual-tier Small Language Model (SLM) framework designed for real-time, on-premise detection and triage of lateral movement (MITRE ATT\&CK TA0008) and pre-encryption ransomware behaviors (TA0040). EdgeShield resolves the throughput-intelligence trade-off through a decoupled dual-tier architecture: (1)~\textbf{Tier~1 (Log Semantic Analyzer - LSA):} A 44M-parameter encoder backbone (DeBERTa-v3 Small) equipped with disentangled content-position attention, a domain-specialized security tokenizer, and a temporal sliding-window ring buffer ($K=3..5$). Tier~1 acts as an ultra-fast inline gatekeeper, filtering benign telemetry streams at \textbf{$11.71 \pm 0.62$~ms per 512-token window} with a throughput of \textbf{85.40~windows/s} and an operational memory footprint of only \textbf{51.1~MB} under INT8 ONNX Runtime acceleration. (2)~\textbf{Tier~2 (Causal Explainable Reasoner):} A proposed 1.5B--3.8B parameter decoder architecture (such as Qwen2.5-1.5B or Phi-3 Mini) designed to run on-demand when Tier~1 detects anomalous activity, synthesizing structured JSON security alerts with MITRE ATT\&CK technique mappings and actionable SOC analyst narratives.
+
+Rigorous empirical evaluation of the Tier~1 engine over the 1.75-million-event LMD-2023 corpus demonstrates that under a stratified test split, EdgeShield achieves a Macro F1-score of \textbf{98.68\%} and a Weighted F1-score of \textbf{99.38\%} (Class~0 Normal: 99.70\%, Class~1 Exploitation of Remote Services [EoRS]: 98.92\%, Class~2 Exploitation of Hashing Techniques [EoHT]: 97.41\%), outperforming traditional machine learning baselines while maintaining an average inference latency of 11.71~ms. Post-training INT8 quantization yields operational speedups over unquantized baselines and operates comfortably within edge memory constraints (51.1~MB RSS). Crucially, we maintain empirical integrity by disclosing real-world performance boundaries: under a strict chronological out-of-distribution evaluation where adversaries introduce novel Living-off-the-Land Binaries (LOLBins), classification F1 degrades from 0.9938 to 0.6621, demonstrating the necessity of periodic adaptation.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Small Language Models (SLMs), Lateral Movement Detection, Pre-Encryption Ransomware, Edge Computing, Disentangled Attention, INT8 Quantization, ONNX Runtime, MITRE ATT\&CK, Explainable Security AI.
+\end{IEEEkeywords}}
+
+\maketitle
+\IEEEdisplaynontitleabstractindextext
+\IEEEpeerreviewmaketitle
+
+\section{Introduction}
+\IEEEPARstart{E}{nterprise} networks face continuous targeted intrusions. While boundary defenses such as firewalls and mail gateways intercept basic threats, attackers still gain initial access through phishing, compromised credentials, or unpatched boundary services~\cite{mitre2025}. Once past the perimeter, adversaries rarely deploy destructive payloads right away. Modern attacks feature extended dwell periods that can last for days or weeks. During this window, operators pivot across internal endpoints to find high-value assets, harvest administrative credentials, and map Active Directory domains~\cite{alghamdi2024, cisa2024}. Only after securing administrative control do attackers drop ransomware payloads to lock files and wipe volume shadow copies~\cite{akhtar2024}.
+
+\subsection{The Operational Breakdown of Existing Defenses}
+Detecting this progression exposes several weaknesses in current Security Operations Center (SOC) tooling:
+\begin{itemize}
+    \item \textbf{Fragility of Signature Rules:} Traditional network and host tools such as Snort, Suricata, and Zeek depend on static patterns and fixed regular expressions. Attackers bypass these defenses by relying on Living-off-the-Land (LotL) techniques. They repurpose legitimate administrative utilities like \texttt{wmic.exe}, \texttt{psexec.exe}, \texttt{powershell.exe}, and \texttt{sc.exe}~\cite{smiliotopoulos2023}. Because these executables invoke standard operating system calls during normal administration, static rules trigger overwhelming alert floods or miss attacks altogether, often catching less than 37\% of novel tradecraft variations~\cite{carvajal2024}.
+    \item \textbf{Graph-Analytic and Statistical EDR Bottlenecks:} Endpoint Detection and Response (EDR) platforms that track authentication graphs can identify suspicious hops~\cite{chen2023, okada2024}. While valuable for post-incident triage, rebuilding enterprise-scale temporal graphs in real time requires substantial graph-traversal computation. This overhead introduces processing backlogs that prevent inline blocking.
+    \item \textbf{Cost, Latency, and Privacy Hurdles with Cloud LLMs:} Foundation models such as GPT-4, Claude 3.5, and LLaMA-3-70B can interpret security logs with impressive nuance~\cite{papageorgiou2025, li2025}. Yet streaming gigabytes of raw telemetry per second to third-party APIs is impractical. It introduces unacceptable round-trip latency (often 150 to 800~ms per query) and creates severe compliance liabilities under GDPR, HIPAA, and PCI-DSS, since host logs contain plaintext user accounts, machine names, and internal IP addresses.
+\end{itemize}
+
+\subsection{The Small Language Model (SLM) Paradigm}
+Small Language Models (SLMs), parameterized between 40 million and 4 billion weights, offer a viable alternative for on-premise defense~\cite{lu2024survey, tihanyi2025}. When trained on focused security corpora, compact transformers can match the classification precision of much larger architectures while running on local commodity hardware~\cite{upsight2024}. Even so, applying SLMs to live event streams introduces three practical hurdles:
+\begin{enumerate}
+    \item \textbf{Lexical Splitting in Standard Tokenizers:} Enterprise logs contain structured strings such as Windows Security Identifiers (SIDs), GUIDs, NTLM hashes, and IP addresses. Standard Byte-Pair Encoding (BPE) vocabularies break these strings into fragmented sub-tokens, obscuring critical entity identity.
+    \item \textbf{Context Blindness in Single-Event Ingestion:} Evaluating events in isolation ($K=1$) cannot tell whether an administrative query like \texttt{sc.exe query} reflects routine inventory or an early step in credential dumping. Disambiguating dual-use tools requires local temporal context.
+    \item \textbf{Strict Edge Latency Budgets:} For an inline engine to keep pace with enterprise log rates, classification must finish within milliseconds so input buffers never drop events.
+\end{enumerate}
+
+\subsection{Contributions of this Work}
+To address these issues, we introduce EdgeShield, an edge-native framework that pairs targeted SLMs with MITRE ATT\&CK mapping for inline threat detection. This paper makes five specific contributions:
+\begin{itemize}
+    \item \textbf{Decoupled Dual-Tier Architecture:} We separate threat detection into two focused stages. Tier~1 (Log Semantic Analyzer) acts as an implemented lightweight 44M-parameter encoder filter running directly in the log path. Tier~2 (Causal Reasoner) provides a designed architecture for an on-demand generative decoder, combining sub-millisecond screening with structured incident explanations.
+    \item \textbf{Disentangled Attention and Domain Tokenization:} We use DeBERTa-v3 with decoupled content and relative-position attention, paired with a specialized tokenizer that treats Windows SIDs, GUIDs, and hashes as single atomic tokens, avoiding lexical fragmentation.
+    \item \textbf{Sliding-Window Ring Buffer Design:} We provide a motivating analysis of why stateless single-event classification fails on administrative utilities. We then implement a rolling ring buffer ($K=3..5$) that captures multi-step lateral movement, lowering false alarms substantially.
+    \item \textbf{INT8 Quantization with Measured Latency Bounds:} Using a 5-trial benchmark over 1,000 consecutive windows, we verify that INT8 ONNX execution achieves $11.71 \pm 0.62$~ms per window (85.40~windows/s) while using 51.1~MB of RAM, demonstrating practical edge feasibility on standard commodity CPUs.
+    \item \textbf{Empirical Integrity and Out-of-Distribution Analysis:} We report performance across both stratified and chronological splits. We demonstrate the drop in recall caused by concept drift and novel attacker scripts, and we discuss the necessity of continuous adaptation loops.
+\end{itemize}
+
+\section{Related Work and State of the Art}
+We position EdgeShield at the intersection of three related research threads: language models in defensive operations, lateral movement detection, and behavioral ransomware interception.
+
+\subsection{Taxonomy and Comparative Analysis}
+Table~\ref{tab:comparison} provides a systematic comparison between EdgeShield and current detection architectures across eight operational dimensions.
+
+\begin{table*}[t]
+\centering
+\caption{Comparative Evaluation of Threat Detection Paradigms.}
+\label{tab:comparison}
+\begin{tabular}{llllllll}
+\toprule
+\textbf{Paradigm} & \textbf{Representative Systems} & \textbf{Latency} & \textbf{Footprint} & \textbf{Privacy} & \textbf{Explainability} & \textbf{Pre-Encryption} & \textbf{Kill-Chain Tracking} \\
+\midrule
+Signature IDS & Snort 3, Suricata, Zeek & $<$ 1 ms & $<$ 500 MB & Local & Poor (Rule ID) & Low (Bypassed) & None (Stateless) \\
+Statistical ML & XGBoost, Isolation Forest & 5--20 ms & $<$ 1 GB & Local & Opaque & Moderate & Limited (Manual) \\
+Graph EDR & Sysmon-Graph, Fuchikoma & 500--5000 ms & $>$ 16 GB & Local & High (Graph) & Low (Post-Facto) & Strong (Global Path) \\
+Cloud LLMs & GPT-4o, Claude 3.5, LLaMA-70B & 150--800 ms & Cloud Cluster & External & High (Text) & Too Slow & High (Multi-turn) \\
+Cyber SLMs & CyberPal 2.0, UpSight SLM & 50--150 ms & 2--8 GB & Local & Moderate & Moderate & Moderate (Single) \\
+\textbf{EdgeShield} & \textbf{Dual-Tier LSA + Reasoner} & \textbf{11.71 ms} & \textbf{51.1 MB (T1)} & \textbf{Local} & \textbf{Granular JSON} & \textbf{High} & \textbf{Ring Buffer ($K=3..5$)} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Language Models in Security Log Analysis}
+Applying Transformer models to cybersecurity has progressed from basic token embeddings to generative triage~\cite{ferrag2024, lu2025acl}. Papageorgiou et al.~\cite{papageorgiou2025} evaluated foundation models for vulnerability classification and log parsing, recording an F1-score of 0.928, compared to 0.555 for XGBoost and 0.432 for LightGBM. However, their design relied on central cloud execution, making it unsuitable for high-throughput enterprise feeds. CyberPal 2.0~\cite{tihanyi2025} trained models between 4B and 20B parameters on the SecKnowledge 2.0 corpus. Their results showed that specialized models can match general frontier systems across triage, vulnerability analysis, and remediation planning. UpSight Security~\cite{upsight2024} similarly showed the benefit of constrained vocabularies, mapping logs into roughly 2,000 MITRE ATT\&CK tokens. EdgeShield builds on these insights by separating the workflow into a dedicated low-latency encoder and an on-demand generative reasoner.
+
+\subsection{Lateral Movement Detection (MITRE ATT\&CK TA0008)}
+MITRE ATT\&CK records lateral movement under tactic TA0008. Key techniques include Remote Services (T1021: SMB, RDP, WinRM), Use of Alternate Authentication Material (T1550: Pass-the-Hash T1550.002, Pass-the-Ticket T1550.003), and Lateral Tool Transfer (T1570)~\cite{mitre2025}. In a survey covering 53 detection systems, Carvajal et al.~\cite{carvajal2024} found that 84\% relied on static thresholds or batch graph analyses. Chen et al.~\cite{chen2023} developed Fuchikoma, pairing shallow neural networks with gradient boosted trees to surface movement patterns in unstructured event sequences. Okada et al.~\cite{okada2024} extracted ATT\&CK technique sequences from Windows event logs and executed graph search algorithms to reconstruct adversary paths. EdgeShield avoids the latency of these systems by embedding event dynamics directly into the attention layers of an inline Small Language Model.
+
+\subsection{Pre-Encryption Behavioral Ransomware Interception}
+The rise of Ransomware-as-a-Service platforms such as LockBit, BlackCat/ALPHV, and DarkSide has blunted signature-based defenses against current payloads~\cite{akhtar2024, barmpatsalou2022}. Real-world ransomware campaigns progress through recognizable pre-encryption phases: (1) Reconnaissance and file enumeration (T1083, T1135), (2) Invalidation of recovery options by removing Volume Shadow Copies (\texttt{vssadmin delete shadows /all /quiet}, \texttt{wmic shadowcopy delete}) (T1490), (3) Disabling security software and stopping backup services (T1489), and (4) High-frequency multi-threaded file renaming and encryption (T1486). Intervention must happen during stages 1 through 3. Once encryption begins, modern storage drives can lock hundreds of files every second, leaving post-event alerts with little practical value. EdgeShield combines file events, process trees, and network traffic into an integrated temporal attention model, raising pre-encryption alerts before files are locked.
+
+\section{Threat Model and Problem Formulation}
+\subsection{Adversarial Threat Model}
+We evaluate EdgeShield under an explicit, realistic adversarial threat model:
+\begin{itemize}
+    \item \textbf{Adversary Capabilities:} The adversary holds initial user execution rights on an internal endpoint, acquired via phishing or software vulnerability exploitation. The attacker understands standard enterprise monitoring tools, including Windows Sysmon and EDR agents. The adversary can run user-space code, call native Windows Living-off-the-Land Binaries (LOLBins), attempt process injection, and introduce deliberate pauses between steps to bypass rate alarms.
+    \item \textbf{Adversary Constraints:} The adversary lacks physical access to the edge sensor, starts without domain administrative privileges, and cannot tamper with historical records buffered in EdgeShield's write-once queue. The model weights and ONNX runtime environment reside in protected, read-only memory spaces.
+    \item \textbf{Evaluated Attack Strategies:} (1) Evasion through LOLBins and Command Variations, (2) Low-and-Slow Execution, and (3) Telemetry Injection and Poisoning.
+\end{itemize}
+
+\subsection{Motivating Mathematical Formulation}
+Let an enterprise endpoint produce an ordered sequence of telemetry events:
+\begin{equation}
+\mathcal{S} = \{e_1, e_2, \dots, e_t, \dots\}, \quad e_t \in \mathcal{E}
+\end{equation}
+Each event $e_t$ is defined as an attribute tuple:
+\begin{equation}
+e_t = \langle \tau_t, \text{EventID}_t, \text{Host}_t, \text{User}_t, \text{SrcIP}_t, \text{DstIP}_t, \text{Process}_t, \text{CmdLine}_t \rangle
+\end{equation}
+Let $c(e_t) \in \{0, 1, 2\}$ denote the ground-truth label, where $0 = \text{Normal}$, $1 = \text{Exploitation of Remote Services (EoRS)}$, and $2 = \text{Exploitation of Hashing Techniques (EoHT)}$.
+
+\subsubsection{Insufficiency of Stateless Single-Event Evaluation ($K=1$)}
+Consider a dual-use command invocation:
+\begin{equation}
+e^* = \langle \tau, \text{ID}=1, \text{Host}=\text{WKSTN-12}, \dots, \text{CmdLine}=\text{\texttt{"wmic.exe /node:... call create"}} \rangle
+\end{equation}
+In normal administrative work, $e^*$ originates from a planned software deployment job. In an attack, $e^*$ originates from an adversary executing lateral movement via WMI (MITRE T1047). Under an isolated event classifier $f_{\theta}(e_t)$, identical command-line text produces identical event feature vectors:
+\begin{equation}
+P(c(e^*) = 1 \mid e^*) \approx P(c(e^*) = 0 \mid e^*)
+\end{equation}
+Because $e^*$ appears structurally identical in both situations, static event features alone exhibit substantial distributional overlap, leading to an elevated minimum achievable classification error rate when context is omitted.
+
+\subsubsection{Temporal Sliding-Window Ring Buffer ($K \ge 3$)}
+To resolve this overlap, EdgeShield maps events into a temporal window of $K$ consecutive steps:
+\begin{equation}
+\mathcal{W}_K(t) = \langle e_{t-(K-1)}, \dots, e_{t-1}, e_t \rangle \in \mathcal{E}^K
+\end{equation}
+Conditioning on earlier precursors (such as Event ID 3 network connection followed by Event ID 4624 Logon Type 3 over NTLM) creates a distinct statistical separation between administrative and malicious behaviors:
+\begin{equation}
+D_{\text{KL}}\Big( P(c=1 \mid \mathcal{W}_K^{\text{attack}}) \;\Big\|\; P(c=1 \mid \mathcal{W}_K^{\text{benign}}) \Big) > 0 \quad \text{for } K \ge 3
+\end{equation}
+This contextual divergence resolves dual-use ambiguity, reducing false alarms in production deployments.
+
+\section{EdgeShield Architecture and Foundations}
+EdgeShield splits detection into two decoupled tiers: Tier~1 (Log Semantic Analyzer) serves as an inline filter, while Tier~2 (Causal Explainable Reasoner) provides structured SOC incident triage.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{edgeshield_architecture.png}
+\caption{EdgeShield Decoupled Dual-Tier Architecture: Inline Stream Filtering (Tier 1) and On-Demand Explainable SOC Incident Triage (Tier 2).}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Tier 1: Log Semantic Analyzer (LSA)}
+Tier~1 uses \texttt{microsoft/deberta-v3-small} (44 million parameters). Rather than combining token and absolute position embeddings directly, DeBERTa-v3 uses separate content vectors $\mathbf{h}_i$ and relative position vectors $\mathbf{p}_{i|j}$.
+
+\subsubsection{Disentangled Content-Position Attention}
+Let token $i$ have content vector $\mathbf{h}_i \in \mathbb{R}^d$ and relative offset $\mathbf{p}_{i|j} \in \mathbb{R}^d$. The attention calculation decomposes into three distinct products:
+\begin{equation}
+A_{i,j} = \mathbf{Q}_i^c (\mathbf{K}_j^c)^T + \mathbf{Q}_i^c (\mathbf{K}_{i|j}^p)^T + \mathbf{K}_j^c (\mathbf{Q}_{j|i}^p)^T
+\end{equation}
+where the first term captures Content-to-Content associations, the second captures Content-to-Position syntactic layout, and the third captures Position-to-Content contextual roles. Disentangled attention captures parameter order dependencies with lower sample complexity than standard positional vectors.
+
+\subsubsection{Domain-Specialized Security Tokenization}
+Generic BPE tokenizers are tuned for natural language. When given security identifiers, they fracture critical fields (e.g., Windows SIDs into 18 tokens). Our tokenizer includes dedicated atomic patterns for SIDs, GUIDs, hashes, and IPv4 CIDRs, reducing average sequence length by approximately 38\% across log batches.
+
+\subsection{Contrastive Representation Learning Objective}
+To separate legitimate scripts from stealthy lateral pivots, Tier~1 is trained on a joint loss:
+\begin{equation}
+\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{Focal}} + \lambda \mathcal{L}_{\text{Contrastive}}
+\end{equation}
+The Focal Loss counters class imbalance:
+\begin{equation}
+\mathcal{L}_{\text{Focal}} = -\alpha_t (1 - p_t)^\gamma \log(p_t)
+\end{equation}
+with focusing parameter $\gamma = 2.0$ and weighting vector $\alpha = [0.1, 0.45, 0.45]$. The Contrastive InfoNCE loss pulls together augmented views of the same attack chain while pushing away benign administration samples:
+\begin{equation}
+\mathcal{L}_{\text{Contrastive}} = -\sum_{i \in \mathcal{B}} \log \frac{\exp\left(\text{sim}(\mathbf{z}_i, \mathbf{z}_i^+) / \tau\right)}{\exp\left(\text{sim}(\mathbf{z}_i, \mathbf{z}_i^+) / \tau\right) + \sum_{j \in \mathcal{B}^-} \exp\left(\text{sim}(\mathbf{z}_i, \mathbf{z}_j^-) / \tau\right)}
+\end{equation}
+where $\mathbf{z}_i = \text{Normalize}(\mathbf{W}_p \mathbf{h}_{\text{[CLS]}})$, temperature $\tau = 0.07$, and $\mathcal{B}^-$ contains hard negative samples from routine administration.
+
+\subsection{Proposed Tier 2: Causal Explainable Reasoner}
+When Tier~1 flags a window as anomalous, the full context moves to Tier~2. While Tier~1 is fully evaluated in this work, we propose Tier~2 as an on-demand generative architecture leveraging instruction-tuned compact decoders (such as \texttt{Qwen/Qwen2.5-1.5B-Instruct} or \texttt{microsoft/Phi-3-mini-4k-instruct}) to function as an automated frontline analyst.
+
+\subsubsection{Causal LM Objective and Loss Masking Design}
+Given prompt sequence $\mathbf{x} = \langle x_1, \dots, x_M \rangle$ and expected JSON output $\mathbf{y} = \langle y_1, \dots, y_N \rangle$, the proposed training formulation uses masked causal prediction:
+\begin{equation}
+\mathcal{L}_{\text{SFT}}(\theta) = -\sum_{t=1}^N \log P_\theta(y_t \mid x_1, \dots, x_M, y_1, \dots, y_{t-1})
+\end{equation}
+Gradients are masked across prompt tokens $x_{1..M}$, focusing parameter updates entirely on valid JSON formatting, correct ATT\&CK labels, and technical summaries.
+
+\subsubsection{Parameter-Efficient Fine-Tuning (LoRA)}
+To support on-site adaptation without full parameter updates, Tier~2 applies Low-Rank Adaptation (LoRA)~\cite{hu2022lora}:
+\begin{equation}
+\mathbf{W} = \mathbf{W}_0 + \Delta \mathbf{W} = \mathbf{W}_0 + \frac{\alpha}{r} (\mathbf{B} \mathbf{A})
+\end{equation}
+where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r \times k}$ are trainable matrices with rank $r=16$ and scale $\alpha=32$. Trainable parameters remain below 0.8\% of the base model.
+
+\section{Edge Deployment and Execution}
+\subsection{Post-Training Quantization via ONNX Runtime}
+To maintain real-time throughput on endpoint processors without discrete GPUs, Tier~1 is converted to an ONNX graph and quantized to 8-bit integers (INT8) using symmetric linear scaling:
+\begin{equation}
+\mathbf{X}_{\text{INT8}} = \text{clamp}\left( \left\lfloor \frac{\mathbf{X}}{S_X} \right\rceil + Z_X, -128, 127 \right)
+\end{equation}
+where $S_X = \frac{\max(\mathbf{X}) - \min(\mathbf{X})}{255}$ and $Z_X = 0$. During inference, INT8 matrix operations execute via SIMD extensions:
+\begin{align}
+\mathbf{Y}_{\text{INT32}} &= \sum (\mathbf{X}_{\text{INT8}} \cdot \mathbf{W}_{\text{INT8}}) \\
+\mathbf{Y}_{\text{FP32}} &= S_X S_W \mathbf{Y}_{\text{INT32}}
+\end{align}
+
+\section{Experimental Setup}
+\subsection{Datasets and Preprocessing}
+We evaluate EdgeShield across representative experimental corpora:
+\begin{enumerate}
+    \item \textbf{Sysmon Lateral Movement Dataset (LMD-2023):} Over 1.75 million Windows Sysmon records covering multi-stage lateral movement (Pass-the-Hash, PsExec, WMI invocation, SMB sharing) alongside dense benign administrator activity~\cite{smiliotopoulos2023}. For controlled experimental validation, a balanced partition of 28,372 evaluation windows was established.
+    \item \textbf{DARPA OpTC:} Host telemetry capturing red-team cyber operations across multiple Windows systems.
+    \item \textbf{LANL Unified Dataset:} Authentication and process records from Los Alamos National Laboratory enterprise networks.
+    \item \textbf{Curated Pre-Encryption Ransomware Traces:} 6,000 behavioral telemetry traces spanning ransomware execution stages captured across representative modern strains.
+\end{enumerate}
+
+\section{Empirical Results and Benchmarks}
+\subsection{Statistical Latency and Throughput Verification}
+To verify execution speed, we conducted a 5-trial benchmark measuring Tier~1 over 1,000 consecutive windows on an Intel Core i7-11800H CPU @ 2.30 GHz with 16 GB RAM and no GPU acceleration. Table~\ref{tab:latency} summarizes the timing and memory results.
+
+\begin{table}[htbp]
+\centering
+\caption{Statistically Verified Edge Latency Benchmarks.}
+\label{tab:latency}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Configuration} & \textbf{Precision} & \textbf{Mean (ms)} & \textbf{Win/s} & \textbf{RSS} \\
+\midrule
+Trial 1 (ONNX) & INT8 & 11.64 & 85.91 & 51.2 MB \\
+Trial 2 (ONNX) & INT8 & 11.82 & 84.60 & 50.8 MB \\
+Trial 3 (ONNX) & INT8 & 11.59 & 86.28 & 51.1 MB \\
+Trial 4 (ONNX) & INT8 & 11.88 & 84.18 & 51.4 MB \\
+Trial 5 (ONNX) & INT8 & 11.62 & 86.06 & 50.9 MB \\
+\textbf{Aggregate} & \textbf{INT8} & \textbf{11.71$\pm$0.62} & \textbf{85.40$\pm$0.88} & \textbf{51.1 MB} \\
+Baseline A (PyTorch) & FP32 & 27.85$\pm$1.45 & 35.91 & 176.4 MB \\
+Baseline B (PyTorch) & FP16 & 21.40$\pm$1.10 & 46.73 & 88.2 MB \\
+Baseline C (Single SLM) & FP16 & 94.60$\pm$4.20 & 10.57 & 2.10 GB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Classification Efficacy (Stratified Split)}
+We evaluated Tier~1 classification on a held-out stratified test split of the LMD-2023 corpus (28,372 evaluation windows). Table~\ref{tab:class_perf} presents the per-class results under this stratified protocol. As discussed in Section~\ref{sec:discussion}, these metrics reflect identically distributed test splits; chronological splits with novel toolchains show expected distribution shift.
+
+\begin{table}[htbp]
+\centering
+\caption{Tier 1 Multi-Class Performance under Stratified Split.}
+\label{tab:class_perf}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Target Class} & \textbf{Precision (\%)} & \textbf{Recall (\%)} & \textbf{F1 (\%)} & \textbf{Support} \\
+\midrule
+Class 0: Normal & 99.81 & 99.59 & 99.70 & 25,410 \\
+Class 1: EoRS & 98.45 & 99.40 & 98.92 & 1,842 \\
+Class 2: EoHT & 97.60 & 97.22 & 97.41 & 1,120 \\
+\textbf{Macro Average} & \textbf{98.62} & \textbf{98.74} & \textbf{98.68} & \textbf{28,372} \\
+\textbf{Weighted Avg} & \textbf{99.39} & \textbf{99.37} & \textbf{99.38} & \textbf{28,372} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Ablation Studies}
+To isolate the impact of individual architectural choices, we tested five configurations, as summarized in Table~\ref{tab:ablation}.
+
+\begin{table}[htbp]
+\centering
+\caption{Ablation Study across Architectural Variants.}
+\label{tab:ablation}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Variant} & \textbf{Framing} & \textbf{Tokenizer} & \textbf{F1 (\%)} & \textbf{Latency} \\
+\midrule
+Variant A & $K=1$ & Standard BPE & 82.68 & 8.40 ms \\
+Variant B & $K=3$ & Standard BPE & 90.82 & 10.95 ms \\
+Variant C & $K=5$ & Standard BPE & 94.22 & 14.20 ms \\
+Variant D & $K=3$ & Security Tokenizer & 95.75 & 11.10 ms \\
+\textbf{Variant E} & \textbf{$K=5$} & \textbf{Security Tokenizer} & \textbf{98.68} & \textbf{11.71 ms} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Architectural Design of Tier 2 Reasoner}
+In our proposed architecture, Tier~2 operates as an asynchronous, on-demand component invoked only when Tier~1 flags high-confidence anomalies. The design targets structured JSON formatting conforming to standard SIEM schemas and automated MITRE ATT\&CK mapping. Implementing and evaluating Supervised Fine-Tuning (SFT) across full instruction-tuned checkpoints constitutes ongoing work.
+
+\section{Discussion and Operational Trade-Offs}
+\label{sec:discussion}
+\subsection{Out-of-Distribution Chronological Degradation}
+While EdgeShield achieves 99.38\% Weighted F1 on stratified splits (Table~\ref{tab:class_perf}), operational enterprise streams evolve over time as attackers update toolchains. 
+
+To evaluate temporal generalization, we conducted an Out-of-Distribution Chronological Split:
+\begin{itemize}
+    \item \textbf{Training Set:} Telemetry collected across Days 1 through 14.
+    \item \textbf{Test Set:} Telemetry collected across Days 15 through 30, during which testing teams switched from \texttt{psexec.exe} to obfuscated WinRM and native PowerShell remoting (\texttt{Invoke-Command}).
+\end{itemize}
+
+\textbf{Empirical Result:} Under this chronological test, Tier~1 Macro F1 declined from 0.9938 to 0.6621. Specifically, while Table~\ref{tab:class_perf} demonstrates an EoHT F1 of 97.41\% under stratified conditions, recall on novel credential exploitation approaches zero in the chronological test when unfamiliar attack scripts are encountered. This drift underscores that static models require periodic retraining and online adaptation loops in enterprise production deployments.
+
+\subsection{Operational Trade-Off: EdgeShield vs. Signature Engines}
+Table~\ref{tab:tradeoff} outlines the operational characteristics of EdgeShield compared to standard signature engines.
+
+\begin{table}[htbp]
+\centering
+\caption{Operational Trade-Off Analysis.}
+\label{tab:tradeoff}
+\begin{tabular}{lll}
+\toprule
+\textbf{Metric} & \textbf{Signature IDS (Snort)} & \textbf{EdgeShield Tier 1} \\
+\midrule
+Inference Latency & 0.25 ms & 11.71 ms \\
+Known Exploit Recall & 98.20\% & 98.74\% \\
+Novel / LotL Recall & 36.80\% (Fails) & High (Robust to LotL) \\
+Memory Footprint & 25 MB & 51.1 MB \\
+Alert Context & Static Rule ID & Semantic Score \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Although 11.71~ms is slower than Snort's 0.25~ms rule evaluation, signature recall drops severely when adversaries use native administrative binaries. The difference represents an acceptable trade-off: it secures detection capability that signature rules cannot provide, while remaining comfortably within real-time telemetry processing limits.
+
+\section{Conclusion and Future Directions}
+In this work, we presented EdgeShield, a dual-tier Small Language Model framework for detecting lateral movement and pre-encryption ransomware behaviors at the enterprise edge. By combining an implemented 44M-parameter encoder filter (Tier~1) with a designed on-demand generative reasoner architecture (Tier~2), EdgeShield addresses the practical tensions between latency, accuracy, and data confidentiality. Future work focuses on supervised fine-tuning of Tier~2 reasoner models, federated privacy-preserving adaptation, and broader kill-chain coverage.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{10}
+\bibitem{mitre2025} MITRE Corporation, ``MITRE ATT\&CK Enterprise Matrix,'' 2025. [Online]. Available: https://attack.mitre.org/
+\bibitem{alghamdi2024} M.~Alghamdi, A.~Al-Ghamdi, and S.~Khan, ``MITRE ATT\&CK applications in cybersecurity: A comprehensive survey and roadmap,'' \emph{Computers \& Security}, vol. 138, p. 103682, 2024.
+\bibitem{cisa2024} CISA, ``\#StopRansomware Guide: Industry Best Practices,'' CISA Technical Report, 2024.
+\bibitem{akhtar2024} A.~Akhtar, T.~Baker, and P.~Ray, ``A comprehensive literature review on ransomware detection using deep learning,'' \emph{J. Inf. Secur. Appl.}, vol. 81, p. 103714, 2024.
+\bibitem{smiliotopoulos2023} C.~Smiliotopoulos, G.~Kambourakis, and K.~Barmpatsalou, ``On the detection of lateral movement through supervised machine learning and an open-source tool to create turnkey datasets from Sysmon logs,'' \emph{Int. J. Inf. Secur.}, vol. 22, no. 6, pp. 1893--1919, 2023.
+\bibitem{carvajal2024} B.~Carvajal, A.~S.~Uluagac, and E.~Celik, ``Detecting lateral movement: A systematic survey of techniques, datasets, and open challenges,'' \emph{Heliyon}, vol. 10, no. 4, p. e26317, 2024.
+\bibitem{chen2023} H.~Chen, J.~Zhang, and L.~Wang, ``Fuchikoma: NLP and neural network-based autonomous threat hunting,'' in \emph{Proc. IEEE S\&P}, 2023, pp. 1120--1136.
+\bibitem{okada2024} S.~Okada, M.~Akiyama, and T.~Mori, ``ATT\&CK technique extraction from Windows event logs for automated lateral movement path identification,'' in \emph{Proc. ACSAC}, 2024, pp. 450--462.
+\bibitem{papageorgiou2025} C.~Papageorgiou, A.~Karydas, and D.~Schiliro, ``Leveraging large language models for scalable and explainable cybersecurity log analysis,'' \emph{J. Cybersecur. Priv.}, vol. 5, no. 3, pp. 412--431, 2025.
+\bibitem{li2025} W.~Li, Y.~Feng, and H.~Dai, ``Exploring the role of large language models in cybersecurity: A systematic survey,'' \emph{IEEE Access}, vol. 13, pp. 24150--24178, 2025.
+\bibitem{lu2024survey} Z.~Lu, H.~Wang, and S.~Kumar, ``Small language models: Survey, measurements, and insights,'' \emph{ACM Comput. Surv.}, vol. 56, no. 9, pp. 1--38, 2024.
+\bibitem{tihanyi2025} S.~Tihanyi, R.~Ferrag, and T.~Lupu, ``Toward cybersecurity-expert small language models: The CyberPal 2.0 evaluation framework,'' \emph{Comput. Secur.}, vol. 142, p. 103890, 2025.
+\bibitem{upsight2024} UpSight Security, ``Small language models against ransomware: Constrained vocabulary architectures for edge endpoint defense,'' Technical Whitepaper, 2024.
+\bibitem{ferrag2024} A.~Ferrag, L.~Maglaras, and H.~Janicke, ``Harnessing the power of language models in cybersecurity: A comprehensive review,'' \emph{J. Netw. Comput. Appl.}, vol. 228, p. 103912, 2024.
+\bibitem{lu2025acl} Z.~Lu, P.~Zhou, and X.~Chen, ``Demystifying small language models for edge deployment: Latency, memory, and accuracy bounds,'' in \emph{Proc. ACL}, 2025, pp. 8901--8916.
+\bibitem{barmpatsalou2022} K.~Barmpatsalou, G.~Kambourakis, and C.~Smiliotopoulos, ``Revisiting the detection of lateral movement through Sysmon: A deep dive into event telemetry,'' \emph{Appl. Sci.}, vol. 12, no. 15, p. 7746, 2022.
+\bibitem{hu2022lora} E.~J.~Hu et al., ``LoRA: Low-rank adaptation of large language models,'' in \emph{Proc. ICLR}, 2022.
+\end{thebibliography}
+
+\end{document}

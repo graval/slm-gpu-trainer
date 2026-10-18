@@ -1,15 +1,15 @@
 {
-  "timestamp": 1787514675.1458902,
+  "timestamp": 1792170416.5400245,
   "framework": "EdgeShield Dual-Stream SLM Architecture",
   "streams": {
     "lsa_lateral_movement": {
-      "accuracy": 99.45,
-      "f1_macro": 99.38,
-      "precision": 99.51,
-      "recall": 99.25,
-      "false_positive_rate": 0.45,
-      "false_negative_rate": 0.1,
-      "avg_latency_ms": 48.17
+      "accuracy": 99.2,
+      "f1_macro": 99.09,
+      "precision": 99.41,
+      "recall": 98.8,
+      "false_positive_rate": 0.8,
+      "false_negative_rate": 0.0,
+      "avg_latency_ms": 42.72
     },
     "bpd_ransomware": {
       "accuracy": 100.0,
@@ -18,7 +18,7 @@
       "recall": 100.0,
       "false_positive_rate": 0.0,
       "false_negative_rate": 0.0,
-      "avg_latency_ms": 31.73
+      "avg_latency_ms": 29.64
     }
   },
   "model_head_to_head": [
@@ -61,12 +61,12 @@
     {
       "model": "DeBERTa-v3 Small (EdgeShield LSA/BPD)",
       "params": "44M",
-      "accuracy": 99.45,
-      "f1_macro": 99.38,
-      "precision": 99.51,
-      "recall": 99.25,
-      "latency_cpu_ms": 48.17,
-      "latency_onnx_int8_ms": 1.15,
+      "accuracy": 99.2,
+      "f1_macro": 99.09,
+      "precision": 99.41,
+      "recall": 98.8,
+      "latency_cpu_ms": 42.72,
+      "latency_onnx_int8_ms": 9.23,
       "ram_fp16_gb": 0.18,
       "ram_int8_gb": 0.05
     }
@@ -95,10 +95,10 @@
     },
     {
       "framework": "Random Forest Baseline",
-      "f1_macro": 58.48,
-      "precision": 58.49,
-      "recall": 58.5,
-      "latency_ms": 7.15
+      "f1_macro": 57.78,
+      "precision": 57.78,
+      "recall": 57.82,
+      "latency_ms": 29.54
     },
     {
       "framework": "LSTM Sequence Model",
@@ -112,7 +112,7 @@
       "f1_macro": 98.15,
       "precision": 98.6,
       "recall": 97.71,
-      "latency_ms": 48.17
+      "latency_ms": 42.72
     }
   ],
   "multi_stage_scenarios": [

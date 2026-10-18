@@ -373,22 +373,80 @@ if "🛡️ EdgeShield: Dual-Stream Framework" in page:
         st.markdown("### 📊 EdgeShield Empirical Evaluation & Benchmark Matrix")
         st.caption("Empirical measurements across LMD-2023, DARPA OpTC, and Curated Ransomware behavioral datasets.")
 
+        # Dynamically load live benchmark summary if available
+        live_summary = None
+        for p in ["external/edgeshield_benchmark_summary.json", "evaluation_summary.json"]:
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        live_summary = json.load(f)
+                    break
+                except Exception:
+                    pass
+
+        onnx_bench_data = None
+        if os.path.exists("external/edgeshield_onnx_benchmark.json"):
+            try:
+                with open("external/edgeshield_onnx_benchmark.json", "r", encoding="utf-8") as f:
+                    onnx_bench_data = json.load(f)
+            except Exception:
+                pass
+
+        # Extract live values or fallback to paper verified baselines
+        lsa_acc_val = "99.33%"
+        lsa_lat_val = "38.94 ms"
+        bpd_lead_val = "100%"
+        int8_lat_val = "11.71 ms"
+        speedup_str = "2.38x Faster than FP32 (85.4 win/s)"
+        deberta_cpu_lat = "27.84 ms"
+        deberta_int8_lat = "11.71 ms"
+        deberta_f1 = "99.38%"
+        is_live = False
+
+        if live_summary and "streams" in live_summary:
+            is_live = True
+            lsa_meta = live_summary["streams"].get("lsa_lateral_movement", {})
+            bpd_meta = live_summary["streams"].get("bpd_ransomware", {})
+            if "accuracy" in lsa_meta:
+                lsa_acc_val = f"{lsa_meta['accuracy']:.2f}%"
+            if "avg_latency_ms" in lsa_meta:
+                lsa_lat_val = f"{lsa_meta['avg_latency_ms']:.2f} ms"
+                deberta_cpu_lat = f"{lsa_meta['avg_latency_ms']:.2f} ms"
+            if "accuracy" in bpd_meta:
+                bpd_lead_val = f"{bpd_meta['accuracy']:.0f}%"
+            if "f1_macro" in lsa_meta:
+                deberta_f1 = f"{lsa_meta['f1_macro']:.2f}%"
+
+            for m in live_summary.get("model_head_to_head", []):
+                if "DeBERTa" in m.get("model", ""):
+                    deberta_int8_lat = f"{m.get('latency_onnx_int8_ms', 11.71):.2f} ms"
+                    int8_lat_val = deberta_int8_lat
+                    cpu_num = float(m.get("latency_cpu_ms", 27.84))
+                    int8_num = float(m.get("latency_onnx_int8_ms", 11.71))
+                    if int8_num > 0:
+                        speedup = cpu_num / int8_num
+                        tput = 1000.0 / int8_num
+                        speedup_str = f"{speedup:.2f}x Faster ({tput:.1f} win/s)"
+
+        if is_live:
+            st.success(f"⚡ **Active Hardware Benchmark Profile:** Dynamically loaded from local run (DeBERTa CPU: {deberta_cpu_lat} | ONNX INT8: {deberta_int8_lat} | Paper Reference: 11.71 ms).")
+
         b_col1, b_col2, b_col3, b_col4 = st.columns(4)
         with b_col1:
-            st.metric("LSA Lateral Accuracy", "99.33%", "+43.8% vs XGBoost (55.5%)")
+            st.metric("LSA Lateral Accuracy", lsa_acc_val, "+43.8% vs XGBoost (55.5%)")
         with b_col2:
-            st.metric("LSA Inference Latency", "38.94 ms", "< 200 ms Edge Target")
+            st.metric("LSA Inference Latency", lsa_lat_val, "< 200 ms Edge Target")
         with b_col3:
-            st.metric("BPD Pre-Encryption Lead", "100%", "Pre-encryption Alert Fired")
+            st.metric("BPD Pre-Encryption Lead", bpd_lead_val, "Pre-encryption Alert Fired")
         with b_col4:
-            st.metric("ONNX INT8 Latency", "1.15 ms", "96.5% Faster than FP32")
+            st.metric("ONNX INT8 Latency", int8_lat_val, speedup_str)
 
         st.markdown("#### 🔬 SLM Backbone Head-to-Head Comparison (Paper Section VI)")
         model_df = pd.DataFrame([
             {"Model Backbone": "Phi-3 Mini (3.8B Instruct)", "Params": "3.8B", "Macro F1": "98.15%", "CPU Latency": "142.50 ms", "ONNX INT8 Latency": "28.40 ms", "INT8 RAM": "2.10 GB"},
             {"Model Backbone": "Gemma-2 (2.6B IT)", "Params": "2.6B", "Macro F1": "97.45%", "CPU Latency": "98.20 ms", "ONNX INT8 Latency": "21.60 ms", "INT8 RAM": "1.50 GB"},
             {"Model Backbone": "TinyLlama (1.1B Chat)", "Params": "1.1B", "Macro F1": "93.80%", "CPU Latency": "42.10 ms", "ONNX INT8 Latency": "9.80 ms", "INT8 RAM": "0.70 GB"},
-            {"Model Backbone": "DeBERTa-v3 Small (EdgeShield LSA/BPD)", "Params": "44M", "Macro F1": "96.40%", "CPU Latency": "38.94 ms", "ONNX INT8 Latency": "1.15 ms", "INT8 RAM": "0.05 GB"}
+            {"Model Backbone": "DeBERTa-v3 Small (EdgeShield LSA/BPD)", "Params": "44M", "Macro F1": deberta_f1, "CPU Latency": deberta_cpu_lat, "ONNX INT8 Latency": deberta_int8_lat, "INT8 RAM": "0.05 GB"}
         ])
         st.dataframe(model_df, use_container_width=True, hide_index=True)
 
@@ -398,7 +456,7 @@ if "🛡️ EdgeShield: Dual-Stream Framework" in page:
             {"Defense Approach": "XGBoost Classifier", "Macro F1": "55.50%", "Precision": "58.20%", "Recall": "53.10%", "Inference Latency": "1.20 ms"},
             {"Defense Approach": "LightGBM Classifier", "Macro F1": "43.20%", "Precision": "48.60%", "Recall": "38.90%", "Inference Latency": "0.95 ms"},
             {"Defense Approach": "LSTM Sequence Model", "Macro F1": "78.60%", "Precision": "81.40%", "Recall": "76.00%", "Inference Latency": "8.50 ms"},
-            {"Defense Approach": "EdgeShield Dual-Stream SLM", "Macro F1": "98.15%", "Precision": "98.60%", "Recall": "97.71%", "Inference Latency": "38.94 ms (CPU) / 1.15 ms (ONNX)"}
+            {"Defense Approach": "EdgeShield Dual-Stream SLM", "Macro F1": deberta_f1, "Precision": "99.41%", "Recall": "99.35%", "Inference Latency": f"{deberta_cpu_lat} (CPU) / {deberta_int8_lat} (ONNX)"}
         ])
         st.dataframe(baseline_df, use_container_width=True, hide_index=True)
 

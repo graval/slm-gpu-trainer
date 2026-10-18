@@ -1,0 +1,6 @@
+# Temporary scratch scripts and tool output
+scratch/
+graphify-out/
+.venv/
+__pycache__/
+*.pyc

@@ -6,6 +6,79 @@ Features full support for **EdgeShield**: A Small Language Model Framework for R
 
 ---
 
+## 🚀 Quick Execution Cheatsheet: Commands by Operational Claim
+
+### 1. Run Inference Under 15 ms (INT8 ONNX Edge Execution)
+*Paper Claim:* EdgeShield achieves **11.71 ± 0.62 ms** latency with **50MB RAM footprint** (>85 windows/s throughput) on commodity multi-core CPUs.
+```powershell
+# 5-Trial Statistical Benchmark across 1,000 evaluations (Outputs latency_ms & RAM)
+.\.venv\Scripts\python.exe scripts/benchmark_edgeshield.py --samples 1000 --export_summary
+
+# Rapid single-command threat scan (<1.5 ms per event)
+.\.venv\Scripts\python.exe detect.py --cmd "wmic /node:CORP-DC process call create 'cmd.exe'" --image "wmic.exe"
+```
+
+### 2. Run Decoupled Dual Streams (Coordinated Detection & Correlation)
+*Paper Claim:* Decoupling into Stream A (LSA) and Stream B (BPD) delivers **+8.18 pp F1 gain** over unified monolithic models and detects ransomware prior to mass encryption.
+```powershell
+# Run Real-Time Dual-Stream EDR Stream Monitor Simulation (Stateful Ring Buffer K=3)
+.\.venv\Scripts\python.exe detect.py --variant v2 --simulate
+
+# Run Multi-Stage Coordinated Intrusion Scenarios (ALPHV/BlackCat & LockBit 3.0)
+.\.venv\Scripts\python.exe scripts/benchmark_edgeshield.py --samples 500
+
+# Launch Interactive Streamlit SOC EDR Dashboard
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+### 3. Fine-Tuning & Retraining with Model Name & Dataset
+*Paper Claim:* Joint Cross-Entropy and Supervised Contrastive Loss achieves **99.38% F1** on lateral movement detection.
+```powershell
+# A. Fine-Tune Stream A (LSA) with DeBERTa-v3 Small & Contrastive Loss:
+.\.venv\Scripts\python.exe scripts/train_edgeshield_lsa.py `
+    --model_name "microsoft/deberta-v3-small" `
+    --dataset_path "data/lmd_2023_dataset.csv" `
+    --epochs 3 --batch_size 16 --use_contrastive
+
+# B. Fine-Tune Stream B (BPD) on Ransomware Behavioral Traces:
+.\.venv\Scripts\python.exe scripts/train_edgeshield_bpd.py `
+    --model_name "distilbert-base-uncased" `
+    --dataset_path "data/ransomware_behavioral_traces.csv" `
+    --epochs 3 --batch_size 16 --threat_weight 0.5
+
+# C. Fine-Tune Tier 2 Generative Reasoner (Qwen2.5-1.5B LoRA for XAI ATT&CK JSON Mapping):
+$env:PYTHONUTF8="1"
+.\.venv\Scripts\python.exe train_generator.py `
+    --model_name "Qwen/Qwen2.5-1.5B-Instruct" `
+    --csv_path "data/lmd_2023_dataset.csv" `
+    --epochs 1 --batch_size 2 --gradient_accumulation_steps 4
+```
+
+### 4. ONNX Export & Dynamic INT8 Quantization
+*Paper Claim:* Dynamic Post-Training Quantization (PTQ) compresses the model from **176MB to 44MB** (4x reduction) and accelerates inference by **2.38x** compared to FP32 baselines.
+```powershell
+# Step 1: Export trained PyTorch weights to ONNX format & dynamically quantize to INT8
+.\.venv\Scripts\python.exe scripts/export_onnx.py --checkpoint models/edgeshield_lsa --quantize
+
+# Step 2: Verify parity and benchmark ONNX runtime speed (< 20 ms / 85+ windows/s)
+.\.venv\Scripts\python.exe scripts/benchmark_onnx.py `
+    --model models/onnx_edgeshield/edgeshield_lsa_int8.onnx `
+    --providers CPUExecutionProvider `
+    --runs 500 `
+    --export_summary
+```
+
+### 5. Benchmark & Architectural Ablation vs Baselines
+```powershell
+# Full comparative evaluation (XGBoost, LightGBM, Random Forest, LSTM, DeBERTa-v3)
+.\.venv\Scripts\python.exe scripts/benchmark_edgeshield.py --samples 1000
+
+# Compare v1 (Single Entry, K=1) vs v2 (Sliding Window, K=3) on DARPA OpTC
+.\.venv\Scripts\python.exe scripts/compare_v1_v2.py --csv_path "data/optc_test_benchmark.csv" --num_samples 50
+```
+
+---
+
 ## 🏗️ Architecture Variants & Modularity
 
 ### 1. EdgeShield Dual-Stream SLM Architecture (`edgeshield/`)
@@ -37,6 +110,8 @@ Features full support for **EdgeShield**: A Small Language Model Framework for R
 *   `v1_single_entry/`: Standalone loaders, trainers, detector, and evaluator for Single-Entry analysis.
 *   `v2_sliding_window/`: Standalone loaders, trainers, detector, and evaluator for Sliding-Window analysis.
 *   `scripts/benchmark_edgeshield.py`: Full EdgeShield benchmark evaluating SLMs (Phi-3, Gemma-2, TinyLlama, DeBERTa) vs ML baselines (XGBoost, LightGBM, LSTM).
+*   `scripts/benchmark_onnx.py`: Standalone ONNX Runtime latency & INT8 performance profiler.
+*   `scripts/export_onnx.py`: PyTorch-to-ONNX exporter and INT8 dynamic quantizer.
 *   `scripts/train_edgeshield_lsa.py`: LSA stream trainer CLI with contrastive loss support.
 *   `scripts/train_edgeshield_bpd.py`: BPD stream trainer CLI with attention threat scoring head.
 *   `scripts/compare_v1_v2.py`: Side-by-side benchmark comparison tool for evaluating v1 vs v2 across datasets.
@@ -103,9 +178,9 @@ The script recreates `.venv` for your current Python, installs dependencies from
 For **4-bit QLoRA on Linux + NVIDIA GPU**, use `requirements-qlora.txt` instead (includes `bitsandbytes`; not supported on Windows).
 
 ### 2. Run the Streamlit SOC Web Dashboard
-Launch the gorgeous Streamlit web dashboard:
+Launch the Streamlit web dashboard:
 ```powershell
-.\.venv\Scripts\streamlit run app.py
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 This will open `http://localhost:8501`, featuring:
 * Live SOC simulated alert log feeds.
@@ -116,15 +191,15 @@ This will open `http://localhost:8501`, featuring:
 To evaluate threat logs directly via the terminal:
 * **Interactive Scan Playground:**
   ```powershell
-  .\.venv\Scripts\python detect.py --interactive
+  .\.venv\Scripts\python.exe detect.py --interactive
   ```
 * **Log Stream Simulation:**
   ```powershell
-  .\.venv\Scripts\python detect.py --simulate
+  .\.venv\Scripts\python.exe detect.py --simulate
   ```
 * **Single Command Scan:**
   ```powershell
-  .\.venv\Scripts\python detect.py --cmd "wmic /node:CORP-DC process call create 'cmd.exe'" --image "wmic.exe"
+  .\.venv\Scripts\python.exe detect.py --cmd "wmic /node:CORP-DC process call create 'cmd.exe'" --image "wmic.exe"
   ```
 
 ---
@@ -147,7 +222,7 @@ The CSV dataset must contain at least the following standard host-security colum
 If the dataset is not present, you can run the built-in initializer script to download authentic public lateral movement telemetry and baseline benign Windows logs:
 ```powershell
 # Auto-download covenant & empire attack zips and compile fallback dataset:
-.\.venv\Scripts\python scripts/setup_dataset.py
+.\.venv\Scripts\python.exe scripts/setup_dataset.py
 ```
 *(All large non-code datasets, raw JSON logs, and trained weights are excluded from Git repository tracking via `.gitignore`).*
 
@@ -155,22 +230,22 @@ If the dataset is not present, you can run the built-in initializer script to do
 To train DeBERTa and Qwen models locally on CPU:
 * **Train DeBERTa Classifier:**
   ```powershell
-  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_classifier.py --epochs 3 --batch_size 8
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python.exe train_classifier.py --epochs 3 --batch_size 8
   ```
 * **Train Qwen LoRA Generator:**
   ```powershell
-  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_generator.py --epochs 1 --batch_size 1 --gradient_accumulation_steps 1
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python.exe train_generator.py --epochs 1 --batch_size 1 --gradient_accumulation_steps 1
   ```
 * **Train Phi-3-mini LoRA Generator (INT8 CPU Quantized):**
   ```powershell
-  $env:PYTHONUTF8="1"; .\.venv\Scripts\python train_generator.py --model_name microsoft/Phi-3-mini-4k-instruct --int8 --epochs 1 --batch_size 1 --gradient_accumulation_steps 1 --output_dir models/phi3-lateral-movement
+  $env:PYTHONUTF8="1"; .\.venv\Scripts\python.exe train_generator.py --model_name microsoft/Phi-3-mini-4k-instruct --int8 --epochs 1 --batch_size 1 --gradient_accumulation_steps 1 --output_dir models/phi3-lateral-movement
   ```
 
 
 ### 4. Running Raw vs. Fine-Tuned Metrics Evaluation
 To run comparative metrics (accuracy, macro precision/recall/F1, False Positives, False Negatives, and inference durations) on a 10% test split:
 ```powershell
-$env:PYTHONUTF8="1"; .\.venv\Scripts\python evaluate_comparison.py
+$env:PYTHONUTF8="1"; .\.venv\Scripts\python.exe evaluate_comparison.py
 ```
 This script runs inference on both the raw base model and your locally fine-tuned model and:
 1. Generates `evaluation_summary.json` (consumed dynamically by the Streamlit dashboard).

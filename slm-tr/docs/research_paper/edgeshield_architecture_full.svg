@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1020" width="1440" height="1020">
+  <defs>
+    <style>
+      .main-title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 22px; font-weight: 800; fill: #0f172a; }
+      .sub-title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13.5px; fill: #475569; font-weight: 500; }
+      .box-title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 15.5px; font-weight: 700; fill: #0f172a; }
+      .box-desc { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12.5px; fill: #334155; }
+      .box-highlight { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12.5px; font-weight: 700; fill: #0f172a; }
+      .badge-text { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #ffffff; letter-spacing: 0.5px; }
+      .branch-text { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12.5px; font-weight: 700; fill: #0f172a; }
+      .arrow { stroke: #334155; stroke-width: 2.0; fill: none; marker-end: url(#arrowhead); }
+      .arrow-blue { stroke: #0284c7; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead-blue); }
+      .arrow-purple { stroke: #7c3aed; stroke-width: 2.2; fill: none; marker-end: url(#arrowhead-purple); }
+    </style>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#334155" />
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#0284c7" />
+    </marker>
+    <marker id="arrowhead-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#7c3aed" />
+    </marker>
+  </defs>
+
+  <!-- Clean Background -->
+  <rect width="1440" height="1020" fill="#ffffff" />
+  <rect x="20" y="16" width="1400" height="988" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.8" rx="8" />
+
+  <!-- Header Banner -->
+  <text x="50" y="52" class="main-title">EdgeShield End-to-End Architecture: Dual-Stream Inline Detection, Correlation &amp; Tier 2 XAI</text>
+  <text x="50" y="74" class="sub-title">Decoupled Dual-Stream Detection (LSA + BPD) &#8226; MITRE ATT&amp;CK Threat Correlation &#8226; On-Demand Incident Triage &amp; Reporting</text>
+
+  <!-- ========================================================================= -->
+  <!-- 1. TOP: ENTERPRISE TELEMETRY INGESTION STREAM                             -->
+  <!-- ========================================================================= -->
+  <g>
+    <rect x="340" y="94" width="760" height="66" rx="6" fill="#f8fafc" stroke="#475569" stroke-width="1.8" />
+    <text x="720" y="120" text-anchor="middle" class="box-title">Enterprise Security Telemetry Ingestion Stream</text>
+    <text x="720" y="142" text-anchor="middle" class="box-desc">Windows Sysmon (EIDs 1, 3, 7, 10, 11) &#8226; Security Event Log (EIDs 4624, 4625, 4672, Kerberos Auth Tickets)</text>
+  </g>
+
+  <!-- Branching Arrows from Top to Stream A and Stream B -->
+  <path d="M 530 160 L 530 185 L 360 185 L 360 205" class="arrow-blue" />
+  <path d="M 910 160 L 910 185 L 1080 185 L 1080 205" class="arrow-purple" />
+
+  <!-- Stream Labels -->
+  <rect x="220" y="172" width="280" height="26" rx="4" fill="#0284c7" />
+  <text x="360" y="189" text-anchor="middle" class="badge-text">STREAM A: AUTHENTICATION &amp; IDENTITY</text>
+
+  <rect x="940" y="172" width="280" height="26" rx="4" fill="#7c3aed" />
+  <text x="1080" y="189" text-anchor="middle" class="badge-text">STREAM B: ENDPOINT BEHAVIOR &amp; PROCESSES</text>
+
+  <!-- ========================================================================= -->
+  <!-- 2. STREAM A & STREAM B TOKENIZERS                                         -->
+  <!-- ========================================================================= -->
+  <!-- Stream A Tokenizer -->
+  <g>
+    <rect x="70" y="205" width="580" height="74" rx="6" fill="#f0f9ff" stroke="#0284c7" stroke-width="1.6" />
+    <text x="360" y="231" text-anchor="middle" class="box-title">Domain Security Tokenizer &amp; Sliding Window</text>
+    <text x="360" y="251" text-anchor="middle" class="box-desc">Preserves Security IDs, IP Addresses, and Account Credentials</text>
+    <text x="360" y="269" text-anchor="middle" class="box-desc">Temporal Sliding Window (Evaluates 3 to 5 Sequential Authentication Events)</text>
+  </g>
+
+  <!-- Stream B Tokenizer -->
+  <g>
+    <rect x="790" y="205" width="580" height="74" rx="6" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.6" />
+    <text x="1080" y="231" text-anchor="middle" class="box-title">Constrained Security Vocabulary Tokenizer</text>
+    <text x="1080" y="251" text-anchor="middle" class="box-desc">Specialized Threat Vocabulary (Process Trees, System Calls, Command Flags)</text>
+    <text x="1080" y="269" text-anchor="middle" class="box-desc">Filters Background Noise &#8226; Normalizes File &amp; Process Paths</text>
+  </g>
+
+  <!-- Arrows to Tier 1 Backbones -->
+  <path d="M 360 279 L 360 305" class="arrow-blue" />
+  <path d="M 1080 279 L 1080 305" class="arrow-purple" />
+
+  <!-- ========================================================================= -->
+  <!-- 3. TIER 1: SPECIALIZED SLM DETECTORS (LSA + BPD)                          -->
+  <!-- ========================================================================= -->
+  <!-- Tier 1A: LSA -->
+  <g>
+    <rect x="70" y="305" width="580" height="135" rx="8" fill="#f8fafc" stroke="#0f172a" stroke-width="2.2" />
+    <rect x="90" y="318" width="80" height="22" rx="4" fill="#0284c7" />
+    <text x="130" y="333" text-anchor="middle" class="badge-text">TIER 1A</text>
+    <text x="380" y="335" text-anchor="middle" class="box-title">Log Semantic Analyzer (LSA)</text>
+    <text x="360" y="364" text-anchor="middle" class="box-desc">Model Backbone: DeBERTa-v3 Small (44M Parameters)</text>
+    <text x="360" y="386" text-anchor="middle" class="box-desc">Specialized Detection: Authentication Sequences &amp; Privilege Escalation</text>
+    <text x="360" y="408" text-anchor="middle" class="box-desc">Detects Lateral Movement (Remote Services, Admin Shares, Pass-the-Hash)</text>
+    <text x="360" y="428" text-anchor="middle" class="box-highlight">Ultra-Fast Edge Runtime: ~11.7 ms / window &#8226; Low Footprint (~50 MB RAM)</text>
+  </g>
+
+  <!-- Tier 1B: BPD -->
+  <g>
+    <rect x="790" y="305" width="580" height="135" rx="8" fill="#f8fafc" stroke="#0f172a" stroke-width="2.2" />
+    <rect x="810" y="318" width="80" height="22" rx="4" fill="#7c3aed" />
+    <text x="850" y="333" text-anchor="middle" class="badge-text">TIER 1B</text>
+    <text x="1100" y="335" text-anchor="middle" class="box-title">Behavioral Pattern Detector (BPD)</text>
+    <text x="1080" y="364" text-anchor="middle" class="box-desc">Model Backbone: Lightweight DistilBERT (66M Parameters)</text>
+    <text x="1080" y="386" text-anchor="middle" class="box-desc">Specialized Detection: Real-Time Threat Scoring on Process &amp; File Activity</text>
+    <text x="1080" y="408" text-anchor="middle" class="box-desc">Pre-Encryption Defense: Detects Shadow Copy Deletion &amp; Security Tool Tampering</text>
+    <text x="1080" y="428" text-anchor="middle" class="box-highlight">Ultra-Fast Edge Runtime: &lt; 15 ms / window &#8226; Low Footprint (&lt; 50 MB RAM)</text>
+  </g>
+
+  <!-- Arrows from LSA and BPD to Correlation Engine -->
+  <path d="M 360 440 L 360 475 L 600 475 L 600 495" class="arrow" />
+  <path d="M 1080 440 L 1080 475 L 840 475 L 840 495" class="arrow" />
+
+  <!-- ========================================================================= -->
+  <!-- 4. MITRE ATT&CK DUAL-STREAM CORRELATION ENGINE                            -->
+  <!-- ========================================================================= -->
+  <g>
+    <rect x="220" y="495" width="1000" height="96" rx="8" fill="#f1f5f9" stroke="#334155" stroke-width="2.0" />
+    <rect x="240" y="508" width="140" height="22" rx="4" fill="#334155" />
+    <text x="310" y="523" text-anchor="middle" class="badge-text">CORRELATION ENGINE</text>
+    <text x="730" y="526" text-anchor="middle" class="box-title">MITRE ATT&amp;CK Knowledge Graph &amp; Temporal Threat Correlation</text>
+    <text x="720" y="552" text-anchor="middle" class="box-desc">Coordinated Intrusion: Correlates Lateral Movement (Stream A) + Ransomware Staging (Stream B)</text>
+    <text x="720" y="574" text-anchor="middle" class="box-highlight">Attack Progression Forecasting: Predicts Next Likely Attack Steps via ATT&amp;CK Graph</text>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 5. DECISION BRANCHES                                                      -->
+  <!-- ========================================================================= -->
+  <!-- Branch Left: Clean Normal Stream -->
+  <path d="M 400 591 L 400 645 L 260 645 L 260 675" class="arrow" />
+  <rect x="130" y="630" width="260" height="28" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1.5" />
+  <text x="260" y="649" text-anchor="middle" class="branch-text">[Normal Baseline Activity (&gt;99% events)]</text>
+
+  <!-- Left Box: Fast Discard Engine -->
+  <g>
+    <rect x="70" y="675" width="380" height="110" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="1.8" />
+    <text x="260" y="705" text-anchor="middle" class="box-title">Fast Discard &amp; Archive Engine</text>
+    <text x="260" y="733" text-anchor="middle" class="box-desc">Zero Alert Fatigue &#8226; Silent Archival of Safe Events</text>
+    <text x="260" y="755" text-anchor="middle" class="box-desc">&lt; 0.01 ms Overhead on Safe System Logs</text>
+  </g>
+
+  <!-- Branch Right: Confirmed Anomaly / Coordinated Intrusion -->
+  <path d="M 1040 591 L 1040 645 L 1040 675" class="arrow" />
+  <rect x="850" y="630" width="380" height="28" rx="4" fill="#ffffff" stroke="#b91c1c" stroke-width="1.8" />
+  <text x="1040" y="649" text-anchor="middle" class="branch-text">[Confirmed Threat / Coordinated Intrusion Alert]</text>
+
+  <!-- ========================================================================= -->
+  <!-- 6. TIER 2: CAUSAL EXPLAINABLE REASONER (XAI)                              -->
+  <!-- ========================================================================= -->
+  <g>
+    <rect x="580" y="675" width="790" height="135" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.2" />
+    <rect x="600" y="688" width="80" height="22" rx="4" fill="#b91c1c" />
+    <text x="640" y="703" text-anchor="middle" class="badge-text">TIER 2</text>
+    <text x="980" y="706" text-anchor="middle" class="box-title">Causal Explainable Reasoner (On-Demand Incident Triage)</text>
+    <text x="975" y="736" text-anchor="middle" class="box-desc">Model Backbone: Lightweight Generative Decoder (Qwen2.5 / Phi-3 Mini)</text>
+    <text x="975" y="758" text-anchor="middle" class="box-desc">Specialized Capability: Security-Tuned Incident Analysis &amp; Root Cause Reasoning</text>
+    <text x="975" y="780" text-anchor="middle" class="box-highlight">Fact-Grounded Analysis: Explanations Mapped to Verified ATT&amp;CK Knowledge</text>
+  </g>
+
+  <!-- Arrow from Tier 2 to Incident Output -->
+  <path d="M 975 810 L 975 845" class="arrow" />
+
+  <!-- ========================================================================= -->
+  <!-- 7. TARGET STRUCTURED INCIDENT ALERT & SOAR PLAYBOOKS                       -->
+  <!-- ========================================================================= -->
+  <g>
+    <rect x="580" y="845" width="790" height="125" rx="8" fill="#f8fafc" stroke="#334155" stroke-width="2.0" />
+    <text x="975" y="875" text-anchor="middle" class="box-title">Structured Incident Alert &amp; Automated Response (SOAR)</text>
+    <text x="975" y="901" text-anchor="middle" class="box-desc">Granular MITRE ATT&amp;CK Technique Mapping &#8226; Severity Scoring</text>
+    <text x="975" y="923" text-anchor="middle" class="box-desc">Automated Response Actions: Isolate Compromised Host &#8226; Revoke Tokens &#8226; Protect Backups</text>
+    <text x="975" y="945" text-anchor="middle" class="box-highlight">Generates Plain-English Forensic Incident Reports for Plant Operators &amp; Analysts</text>
+  </g>
+
+</svg>
