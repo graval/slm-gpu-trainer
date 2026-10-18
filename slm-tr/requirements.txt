@@ -22,3 +22,8 @@ tiktoken>=0.5.0
 safetensors>=0.4.0
 optimum-quanto
 
+# Edge deployment & ONNX Runtime
+onnx>=1.15.0
+onnxruntime>=1.17.0
+onnxscript>=0.1.0
+

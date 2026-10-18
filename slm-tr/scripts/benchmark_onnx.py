@@ -1,4 +1,4 @@
-"""
+r"""
 EdgeShield: Standalone ONNX Runtime Benchmark & INT8 Profiler
 Usage:
     .\.venv\Scripts\python.exe scripts/benchmark_onnx.py --model models/onnx_edgeshield/edgeshield_lsa_int8.onnx --runs 100

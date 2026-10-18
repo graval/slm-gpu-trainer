@@ -1,4 +1,4 @@
-"""
+r"""
 EdgeShield: Standalone PyTorch to ONNX Exporter & INT8 Quantizer
 Usage:
     .\.venv\Scripts\python.exe scripts/export_onnx.py --checkpoint models/edgeshield_lsa --quantize
@@ -8,7 +8,20 @@ Usage:
 import os
 import sys
 import argparse
+import subprocess
 from pathlib import Path
+
+# Ensure onnxscript is available (required by PyTorch 2.4+ / Python 3.12+ for ONNX exporter)
+try:
+    import onnxscript
+except ImportError:
+    print("[*] Installing required 'onnxscript' package for PyTorch ONNX exporter...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "onnxscript"])
+        import onnxscript
+        print("[+] 'onnxscript' installed successfully.")
+    except Exception as e:
+        print(f"[!] Warning: Could not auto-install onnxscript: {e}")
 
 # Ensure slm-tr root is on sys.path
 CURRENT_DIR = Path(__file__).resolve().parent

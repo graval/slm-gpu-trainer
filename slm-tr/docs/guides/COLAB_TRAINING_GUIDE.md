@@ -56,7 +56,7 @@ os.chdir("/content/slm-gpu-trainer/slm-tr")
 ```python
 !pip install -q --upgrade pip
 !pip install -q transformers>=4.38.0 datasets>=2.14.0 accelerate>=0.28.0 peft>=0.9.0 trl>=0.8.0
-!pip install -q scikit-learn pandas numpy onnx onnxruntime bitsandbytes optimum-quanto
+!pip install -q scikit-learn pandas numpy onnx onnxruntime onnxscript bitsandbytes optimum-quanto
 !pip install -q sentencepiece tiktoken safetensors altair colorama
 ```
 
