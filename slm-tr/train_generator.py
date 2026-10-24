@@ -144,6 +144,7 @@ def parse_args():
     parser.add_argument("--int8", action="store_true", default=False, help="Use 8-bit quantization (Quanto for CPU / BitsAndBytes for GPU)")
     parser.add_argument("--window_size", type=int, default=3, help="Sliding window size (number of consecutive events per sequence, default: 3)")
     parser.add_argument("--max_length", type=int, default=512, help="Maximum token sequence length (default: 512)")
+    parser.add_argument("--num_samples", type=int, default=4000, help="Maximum number of balanced samples to load for fine-tuning")
     args = parser.parse_args()
 
     # Determine architectural approach suffix
@@ -332,7 +333,8 @@ def main():
         raw_train_dataset, raw_val_dataset = load_lmd_for_decoder(
             args.csv_path,
             window_size=args.window_size,
-            balance_classes=True
+            balance_classes=True,
+            max_samples=args.num_samples
         )
     except Exception as e:
         print(f"[!] Error loading dataset: {e}")
@@ -372,6 +374,13 @@ def main():
         torch_dtype=torch_dtype,
         trust_remote_code=False
     )
+    
+    # Prepare model for k-bit training BEFORE applying LoRA / SFTTrainer
+    if args.qlora and device == "cuda":
+        print("[*] Preparing 4-bit model for k-bit QLoRA gradient training...")
+        from peft import prepare_model_for_kbit_training
+        model = prepare_model_for_kbit_training(model)
+        model.gradient_checkpointing_enable()
     
     # Dynamic Hardware Performance Profiling and Dataset Calibration
     train_dataset, val_dataset = calibrate_generator_dataset_size(
@@ -442,11 +451,7 @@ def main():
         callbacks=[progress_callback]
     )
     
-    # Ensure layers are trainable if using QLoRA
-    if args.qlora and device == "cuda":
-        from peft import prepare_model_for_kbit_training
-        model = prepare_model_for_kbit_training(model)
-        
+
     print("\n" + "=" * 30 + " STARTING TRAINING " + "=" * 30)
     train_result = trainer.train()
     print("=" * 30 + " TRAINING COMPLETE " + "=" * 30 + "\n")

@@ -100,7 +100,13 @@ def generate_windowed_dataframe(df, window_size=3):
         df['formatted_text'] = df.apply(format_event_text, axis=1)
         return df
     
-    records = df.to_dict('records')
+    # Filter to only relevant columns for fast dict conversion and low memory overhead
+    relevant_cols = [c for c in [
+        'EventID', 'EventId', 'CommandLine', 'ParentCommandLine', 'Image', 'ParentImage',
+        'User', 'ParentUser', 'LogonType', 'PipeName', 'SourceIp', 'DestinationIp',
+        'DestinationPort', 'TargetObject', 'normalized_label'
+    ] if c in df.columns]
+    records = df[relevant_cols].to_dict('records') if relevant_cols else df.to_dict('records')
     total = len(records)
     formatted_texts = []
     
@@ -202,7 +208,7 @@ def load_v2_dataset(csv_path, window_size=3, balance_classes=True, test_size=0.2
     
     return train_dataset, val_dataset
 
-def load_v2_for_decoder(csv_path, window_size=3, balance_classes=True, test_size=0.1, random_state=42):
+def load_v2_for_decoder(csv_path, window_size=3, balance_classes=True, test_size=0.1, random_state=42, max_samples=None):
     """
     Loads dataset and formats multi-event sequences into instruction prompts for decoder training.
     """
@@ -219,9 +225,18 @@ def load_v2_for_decoder(csv_path, window_size=3, balance_classes=True, test_size
         malicious_2 = df[df['normalized_label'] == 2]
         benign = df[df['normalized_label'] == 0]
         
-        target_benign_count = min(len(benign), max(2000, 2 * (len(malicious_1) + len(malicious_2))))
-        benign_sampled = benign.sample(n=target_benign_count, random_state=random_state)
-        df = pd.concat([benign_sampled, malicious_1, malicious_2]).sort_index().reset_index(drop=True)
+        if max_samples:
+            per_class = max(10, max_samples // 3)
+            s_c1 = malicious_1.sample(n=min(len(malicious_1), per_class), random_state=random_state)
+            s_c2 = malicious_2.sample(n=min(len(malicious_2), per_class), random_state=random_state)
+            s_c0 = benign.sample(n=min(len(benign), per_class), random_state=random_state)
+            df = pd.concat([s_c0, s_c1, s_c2]).sort_index().reset_index(drop=True)
+        else:
+            target_benign_count = min(len(benign), max(2000, 2 * (len(malicious_1) + len(malicious_2))))
+            benign_sampled = benign.sample(n=target_benign_count, random_state=random_state)
+            df = pd.concat([benign_sampled, malicious_1, malicious_2]).sort_index().reset_index(drop=True)
+    elif max_samples and len(df) > max_samples:
+        df = df.sample(n=max_samples, random_state=random_state).reset_index(drop=True)
         
     df = generate_windowed_dataframe(df, window_size=window_size)
     

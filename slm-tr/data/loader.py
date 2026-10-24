@@ -68,11 +68,11 @@ def create_decoder_prompt(row, text=None, window_size=1):
         image=str(row.get('Image', ''))
     )
 
-def load_lmd_for_decoder(csv_path, window_size=1, balance_classes=True, test_size=0.1, random_state=42):
+def load_lmd_for_decoder(csv_path, window_size=1, balance_classes=True, test_size=0.1, random_state=42, max_samples=None):
     """
     Unified decoder dataset loader delegating to v1 or v2 instruction tuning pipelines.
     """
     if window_size <= 1:
-        return load_v1_for_decoder(csv_path, balance_classes=balance_classes, test_size=test_size, random_state=random_state)
+        return load_v1_for_decoder(csv_path, balance_classes=balance_classes, test_size=test_size, random_state=random_state, max_samples=max_samples)
     else:
-        return load_v2_for_decoder(csv_path, window_size=window_size, balance_classes=balance_classes, test_size=test_size, random_state=random_state)
+        return load_v2_for_decoder(csv_path, window_size=window_size, balance_classes=balance_classes, test_size=test_size, random_state=random_state, max_samples=max_samples)

@@ -168,7 +168,7 @@ def load_v1_dataset(csv_path, balance_classes=True, test_size=0.2, random_state=
     
     return train_dataset, val_dataset
 
-def load_v1_for_decoder(csv_path, balance_classes=True, test_size=0.1, random_state=42):
+def load_v1_for_decoder(csv_path, balance_classes=True, test_size=0.1, random_state=42, max_samples=None):
     """
     Loads dataset and formats each single-event record into instruction prompts for decoder training.
     """
@@ -185,9 +185,18 @@ def load_v1_for_decoder(csv_path, balance_classes=True, test_size=0.1, random_st
         malicious_2 = df[df['normalized_label'] == 2]
         benign = df[df['normalized_label'] == 0]
         
-        target_benign_count = min(len(benign), max(2000, 2 * (len(malicious_1) + len(malicious_2))))
-        benign_sampled = benign.sample(n=target_benign_count, random_state=random_state)
-        df = pd.concat([benign_sampled, malicious_1, malicious_2]).sort_index().reset_index(drop=True)
+        if max_samples:
+            per_class = max(10, max_samples // 3)
+            s_c1 = malicious_1.sample(n=min(len(malicious_1), per_class), random_state=random_state)
+            s_c2 = malicious_2.sample(n=min(len(malicious_2), per_class), random_state=random_state)
+            s_c0 = benign.sample(n=min(len(benign), per_class), random_state=random_state)
+            df = pd.concat([s_c0, s_c1, s_c2]).sort_index().reset_index(drop=True)
+        else:
+            target_benign_count = min(len(benign), max(2000, 2 * (len(malicious_1) + len(malicious_2))))
+            benign_sampled = benign.sample(n=target_benign_count, random_state=random_state)
+            df = pd.concat([benign_sampled, malicious_1, malicious_2]).sort_index().reset_index(drop=True)
+    elif max_samples and len(df) > max_samples:
+        df = df.sample(n=max_samples, random_state=random_state).reset_index(drop=True)
         
     df['formatted_text'] = df.apply(format_single_event_text, axis=1)
     
