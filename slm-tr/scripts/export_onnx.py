@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import subprocess
+import torch
 from pathlib import Path
 
 # Ensure onnxscript is available (required by PyTorch 2.4+ / Python 3.12+ for ONNX exporter)
