@@ -4,3 +4,5 @@ graphify-out/
 .venv/
 __pycache__/
 *.pyc
+*.onnx
+*.onnx.data

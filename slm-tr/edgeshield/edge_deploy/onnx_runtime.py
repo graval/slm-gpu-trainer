@@ -103,18 +103,50 @@ class EdgeDeploymentEngine:
         """
         Applies INT8 Dynamic Post-Training Quantization (PTQ) to the ONNX graph.
         Reduces checkpoint size by ~75% while keeping latency < 200 ms per window.
+        Uses shape preprocessing and targets linear MatMul/Gemm layers to avoid
+        disentangled attention Gather scale exceptions.
         """
         if not ONNX_AVAILABLE or quantize_dynamic is None:
             raise RuntimeError("ONNX Runtime quantization tools not available.")
 
         quantized_path = onnx_model_path.replace(".onnx", "_int8.onnx")
-        quantize_dynamic(
-            model_input=onnx_model_path,
-            model_output=quantized_path,
-            weight_type=QuantType.QInt8,
-            per_channel=True,
-            reduce_range=False
-        )
+        pre_processed_path = onnx_model_path.replace(".onnx", "_preprocessed.onnx")
+        input_to_quantize = onnx_model_path
+
+        try:
+            from onnxruntime.quantization.shape_inference import quant_pre_process
+            quant_pre_process(onnx_model_path, pre_processed_path)
+            if os.path.exists(pre_processed_path):
+                input_to_quantize = pre_processed_path
+        except Exception:
+            input_to_quantize = onnx_model_path
+
+        try:
+            quantize_dynamic(
+                model_input=input_to_quantize,
+                model_output=quantized_path,
+                op_types_to_quantize=['MatMul', 'Gemm'],
+                weight_type=QuantType.QInt8,
+                per_channel=False,
+                reduce_range=False
+            )
+        except Exception:
+            # Fallback with QUInt8
+            quantize_dynamic(
+                model_input=onnx_model_path,
+                model_output=quantized_path,
+                op_types_to_quantize=['MatMul', 'Gemm'],
+                weight_type=QuantType.QUInt8,
+                per_channel=False,
+                reduce_range=False
+            )
+        finally:
+            if os.path.exists(pre_processed_path):
+                try:
+                    os.remove(pre_processed_path)
+                except Exception:
+                    pass
+
         return quantized_path
 
     def create_inference_session(self, onnx_path: str, prefer_gpu: bool = False) -> Any:

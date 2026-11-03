@@ -34,9 +34,16 @@ from edgeshield.data.loader import load_edgeshield_lsa_data, load_edgeshield_bpd
 
 def parse_args():
     parser = argparse.ArgumentParser(description="EdgeShield Comprehensive Benchmark Suite")
-    parser.add_argument("--samples", type=int, default=1000, help="Number of evaluation samples per stream")
+    parser.add_argument("--samples", "--num_samples", dest="samples", type=int, default=1000, help="Number of evaluation samples per stream")
     parser.add_argument("--lsa_samples", type=int, default=None, help="LSA test evaluation samples")
     parser.add_argument("--bpd_samples", type=int, default=None, help="BPD test evaluation samples")
+    parser.add_argument("--lsa_model", type=str, default="models/edgeshield_lsa_deberta", help="Path to trained LSA model checkpoint")
+    parser.add_argument("--bpd_model", type=str, default="models/edgeshield_bpd", help="Path to trained BPD model checkpoint")
+    parser.add_argument("--device", type=str, default=None, help="Execution device (cuda/cpu)")
+    parser.add_argument("--optc_path", type=str, default="data/optc_test_benchmark.csv", help="Path to OpTC benchmark CSV")
+    parser.add_argument("--ransomware_path", type=str, default="data/ransomware_behavioral_traces.csv", help="Path to ransomware CSV")
+    parser.add_argument("--lmd_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to LMD-2023 CSV")
+    parser.add_argument("--export_json", type=str, default="benchmark_results.json", help="Path to export benchmark JSON")
     parser.add_argument("--export_summary", action="store_true", default=True, help="Export benchmark summary JSON")
     return parser.parse_args()
 
@@ -83,13 +90,17 @@ def main():
     print("      - Active Mass Encryption Impact (T1486)")
     print(f"\n[*] Evaluation Sample Allocation -> LSA: {lsa_count} samples | BPD: {bpd_count} samples")
 
-    # 1. Instantiate Pipeline
-    pipeline = EdgeShieldPipeline()
+    # 1. Instantiate Pipeline with user-specified models and device
+    pipeline = EdgeShieldPipeline(
+        lsa_model_path=args.lsa_model,
+        bpd_model_path=args.bpd_model,
+        device=args.device
+    )
     
     # 2. Load Datasets
     print("\n[*] [1/5] Loading and Partitioning Datasets...")
-    lsa_train, lsa_test = load_edgeshield_lsa_data(test_samples=lsa_count)
-    bpd_train, bpd_test = load_edgeshield_bpd_data(test_samples=bpd_count)
+    lsa_train, lsa_test = load_edgeshield_lsa_data(csv_path=args.lmd_path, test_samples=lsa_count)
+    bpd_train, bpd_test = load_edgeshield_bpd_data(csv_path=args.ransomware_path, test_samples=bpd_count)
     
     print(f"  [+] LSA Stream Samples: {len(lsa_test)} test records (LMD-2023 / OpTC)")
     print(f"  [+] BPD Stream Samples: {len(bpd_test)} test records (Ransomware Behavioral Traces)")
@@ -171,7 +182,7 @@ def main():
     
     # Measure ONNX INT8 latency dynamically on current hardware if exported model exists
     onnx_int8_candidate = "models/onnx_edgeshield/edgeshield_lsa_int8.onnx"
-    dynamic_int8_lat = 11.71  # Paper baseline fallback
+    dynamic_int8_lat = None
     if os.path.exists(onnx_int8_candidate):
         try:
             import onnxruntime as ort
@@ -238,12 +249,12 @@ def main():
         {
             "model": "DeBERTa-v3 Small (EdgeShield LSA/BPD)",
             "params": "44M",
-            "accuracy": round(max(lsa_acc, 96.8), 2),
-            "f1_macro": round(max(lsa_f1, 96.4), 2),
-            "precision": round(max(lsa_p, 96.5), 2),
-            "recall": round(max(lsa_r, 96.3), 2),
+            "accuracy": round(lsa_acc, 2),
+            "f1_macro": round(lsa_f1, 2),
+            "precision": round(lsa_p, 2),
+            "recall": round(lsa_r, 2),
             "latency_cpu_ms": round(lsa_avg_latency, 2),
-            "latency_onnx_int8_ms": dynamic_int8_lat,
+            "latency_onnx_int8_ms": dynamic_int8_lat if dynamic_int8_lat is not None else "N/A",
             "ram_fp16_gb": 0.18,
             "ram_int8_gb": 0.05
         }
@@ -274,7 +285,8 @@ def main():
     print(f"{'Model Backbone':<28} | {'Params':<8} | {'Macro F1':<10} | {'CPU Latency':<12} | {'INT8 Latency':<13} | {'RAM (INT8)':<10}")
     print("-" * 85)
     for m in model_comparisons:
-        print(f"{m['model']:<28} | {m['params']:<8} | {m['f1_macro']:>9.2f}% | {m['latency_cpu_ms']:>9.2f} ms | {m['latency_onnx_int8_ms']:>10.2f} ms | {m['ram_int8_gb']:>8.2f} GB")
+        int8_str = f"{m['latency_onnx_int8_ms']:>10.2f} ms" if isinstance(m['latency_onnx_int8_ms'], (int, float)) else f"{str(m['latency_onnx_int8_ms']):>13}"
+        print(f"{m['model']:<28} | {m['params']:<8} | {m['f1_macro']:>9.2f}% | {m['latency_cpu_ms']:>9.2f} ms | {int8_str} | {m['ram_int8_gb']:>8.2f} GB")
     print("=" * 85)
 
     # Export Summary
@@ -311,13 +323,18 @@ def main():
         }
     }
 
+    if args.export_json:
+        with open(args.export_json, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\n[+] Benchmark metrics exported to: {args.export_json}")
+
     if args.export_summary:
         os.makedirs("external", exist_ok=True)
         with open("external/edgeshield_benchmark_summary.json", "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
         with open("evaluation_summary.json", "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
-        print("\n[+] Benchmark summary saved to external/edgeshield_benchmark_summary.json and evaluation_summary.json")
+        print("[+] Benchmark summary saved to external/edgeshield_benchmark_summary.json and evaluation_summary.json")
 
 if __name__ == "__main__":
     main()
