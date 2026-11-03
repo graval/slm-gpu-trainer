@@ -113,6 +113,25 @@ class EdgeDeploymentEngine:
         pre_processed_path = onnx_model_path.replace(".onnx", "_preprocessed.onnx")
         input_to_quantize = onnx_model_path
 
+        # Step 1: Sanitize any NaN or Inf initializers in the ONNX graph
+        try:
+            import onnx
+            from onnx import numpy_helper
+            onnx_model = onnx.load(onnx_model_path)
+            modified = False
+            for init in onnx_model.graph.initializer:
+                arr = numpy_helper.to_array(init)
+                if np.isnan(arr).any() or np.isinf(arr).any():
+                    clean_arr = np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=-1.0)
+                    init.CopyFrom(numpy_helper.from_array(clean_arr, init.name))
+                    modified = True
+            if modified:
+                onnx.save(onnx_model, onnx_model_path)
+                print("[+] Sanitized NaN/Inf initializers in ONNX model graph.")
+        except Exception as e:
+            pass
+
+        # Step 2: Preprocess graph for ONNX Runtime quantization to resolve shape inference
         try:
             from onnxruntime.quantization.shape_inference import quant_pre_process
             quant_pre_process(onnx_model_path, pre_processed_path)
@@ -121,6 +140,7 @@ class EdgeDeploymentEngine:
         except Exception:
             input_to_quantize = onnx_model_path
 
+        # Step 3: Run dynamic quantization
         try:
             quantize_dynamic(
                 model_input=input_to_quantize,
@@ -130,8 +150,8 @@ class EdgeDeploymentEngine:
                 per_channel=False,
                 reduce_range=False
             )
-        except Exception:
-            # Fallback with QUInt8
+        except Exception as q_err:
+            print(f"[!] Primary dynamic quantization error: {q_err}. Attempting fallback...")
             quantize_dynamic(
                 model_input=onnx_model_path,
                 model_output=quantized_path,

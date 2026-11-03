@@ -70,6 +70,15 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(str(ckpt_path))
     model = AutoModelForSequenceClassification.from_pretrained(str(ckpt_path))
 
+    # Sanitize any NaN or Inf in PyTorch parameters before export
+    nan_count = 0
+    for name, param in model.named_parameters():
+        if torch.isnan(param).any() or torch.isinf(param).any():
+            nan_count += 1
+            param.data = torch.nan_to_num(param.data, nan=0.0, posinf=1.0, neginf=-1.0)
+    if nan_count > 0:
+        print(f"[!] Sanitized {nan_count} parameters containing NaN/Inf values.")
+
     engine = EdgeDeploymentEngine(str(out_dir))
     
     print("[*] Exporting to standard ONNX FP32 format...")

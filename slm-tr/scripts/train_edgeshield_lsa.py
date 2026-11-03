@@ -95,17 +95,23 @@ def main():
     except Exception:
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", use_fast=True)
         
-    num_labels = len(TECHNIQUE_TO_ID)
+    num_labels = 3
+    id2label = {0: "Normal", 1: "EoRS", 2: "EoHT"}
+    label2id = {"Normal": 0, "EoRS": 1, "EoHT": 2}
     try:
         model = AutoModelForSequenceClassification.from_pretrained(
             args.model_name, 
             num_labels=num_labels,
+            id2label=id2label,
+            label2id=label2id,
             ignore_mismatched_sizes=True
         ).to(device)
     except Exception:
         model = AutoModelForSequenceClassification.from_pretrained(
             "distilbert-base-uncased", 
             num_labels=num_labels,
+            id2label=id2label,
+            label2id=label2id,
             ignore_mismatched_sizes=True
         ).to(device)
     
@@ -166,6 +172,7 @@ def main():
             if contrastive_fn and hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
                 pooled_embeds = outputs.hidden_states[-1][:, 0, :] # [CLS] embedding
                 cl_loss = contrastive_fn(pooled_embeds, labels)
+                cl_loss = torch.nan_to_num(cl_loss, nan=0.0, posinf=0.0, neginf=0.0)
                 total_loss = ce_loss + 0.3 * cl_loss
             else:
                 total_loss = ce_loss
