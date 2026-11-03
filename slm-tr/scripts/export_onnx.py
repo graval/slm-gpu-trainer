@@ -79,6 +79,7 @@ def main():
             param.data = torch.nan_to_num(param.data, nan=0.0, posinf=1.0, neginf=-1.0)
     if nan_count > 0:
         print(f"[!] Sanitized {nan_count} parameters containing NaN/Inf values.")
+    model = model.float().eval()
 
     engine = EdgeDeploymentEngine(str(out_dir))
     

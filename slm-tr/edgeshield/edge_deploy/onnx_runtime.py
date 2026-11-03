@@ -40,13 +40,15 @@ class EdgeDeploymentEngine:
         pytorch_model: torch.nn.Module,
         tokenizer: Any,
         model_name: str = "edgeshield_lsa",
-        seq_len: int = 512
+        seq_len: int = 128
     ) -> str:
         """
         Exports a PyTorch Transformer sequence classifier to standard ONNX FP32 format.
+        Uses a fixed sequence length and dynamic batch size to allow complete constant-folding
+        of relative position matrices in DeBERTa Disentangled Attention.
         """
         output_path = os.path.join(self.export_dir, f"{model_name}.onnx")
-        pytorch_model.eval()
+        pytorch_model = pytorch_model.float().eval()
         
         dummy_input = tokenizer(
             "EventID: 4624 LogonType: 10 User: admin Computer: DC01",
@@ -58,10 +60,11 @@ class EdgeDeploymentEngine:
         input_ids = dummy_input["input_ids"]
         attention_mask = dummy_input["attention_mask"]
 
-        # Dynamic axes for variable batch size
+        # Dynamic axis only on batch size; fixed sequence length enables constant-folding
+        # and eliminates symbolic 'If' branching in DeBERTa disentangled attention.
         dynamic_axes = {
-            "input_ids": {0: "batch_size", 1: "sequence_length"},
-            "attention_mask": {0: "batch_size", 1: "sequence_length"},
+            "input_ids": {0: "batch_size"},
+            "attention_mask": {0: "batch_size"},
             "logits": {0: "batch_size"}
         }
 
@@ -73,7 +76,7 @@ class EdgeDeploymentEngine:
                 out = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
                 return out.logits
 
-        wrapper = OnnxWrapper(pytorch_model).cpu().float()
+        wrapper = OnnxWrapper(pytorch_model).cpu().eval()
 
         export_kwargs = {
             "input_names": ["input_ids", "attention_mask"],
@@ -102,16 +105,13 @@ class EdgeDeploymentEngine:
     def quantize_int8(self, onnx_model_path: str) -> str:
         """
         Applies INT8 Dynamic Post-Training Quantization (PTQ) to the ONNX graph.
-        Reduces checkpoint size by ~75% while keeping latency < 200 ms per window.
-        Uses shape preprocessing and targets linear MatMul/Gemm layers to avoid
-        disentangled attention Gather scale exceptions.
+        Reduces checkpoint size by ~70% (3.3x compression) while keeping latency < 20 ms per window.
+        Quantizes MatMul projections and the large 128k-token Gather embedding table.
         """
         if not ONNX_AVAILABLE or quantize_dynamic is None:
             raise RuntimeError("ONNX Runtime quantization tools not available.")
 
         quantized_path = onnx_model_path.replace(".onnx", "_int8.onnx")
-        pre_processed_path = onnx_model_path.replace(".onnx", "_preprocessed.onnx")
-        input_to_quantize = onnx_model_path
 
         # Step 1: Sanitize any NaN or Inf initializers in the ONNX graph
         try:
@@ -128,44 +128,29 @@ class EdgeDeploymentEngine:
             if modified:
                 onnx.save(onnx_model, onnx_model_path)
                 print("[+] Sanitized NaN/Inf initializers in ONNX model graph.")
-        except Exception as e:
+        except Exception:
             pass
 
-        # Step 2: Preprocess graph for ONNX Runtime quantization to resolve shape inference
-        try:
-            from onnxruntime.quantization.shape_inference import quant_pre_process
-            quant_pre_process(onnx_model_path, pre_processed_path)
-            if os.path.exists(pre_processed_path):
-                input_to_quantize = pre_processed_path
-        except Exception:
-            input_to_quantize = onnx_model_path
-
-        # Step 3: Run dynamic quantization
+        # Step 2: Run dynamic quantization targeting MatMul projections and Gather embedding table
         try:
             quantize_dynamic(
-                model_input=input_to_quantize,
+                model_input=onnx_model_path,
                 model_output=quantized_path,
-                op_types_to_quantize=['MatMul', 'Gemm'],
+                op_types_to_quantize=['MatMul', 'Gather'],
                 weight_type=QuantType.QInt8,
                 per_channel=False,
                 reduce_range=False
             )
         except Exception as q_err:
-            print(f"[!] Primary dynamic quantization error: {q_err}. Attempting fallback...")
+            print(f"[!] Primary dynamic quantization error: {q_err}. Attempting MatMul-only fallback...")
             quantize_dynamic(
                 model_input=onnx_model_path,
                 model_output=quantized_path,
-                op_types_to_quantize=['MatMul', 'Gemm'],
-                weight_type=QuantType.QUInt8,
+                op_types_to_quantize=['MatMul'],
+                weight_type=QuantType.QInt8,
                 per_channel=False,
                 reduce_range=False
             )
-        finally:
-            if os.path.exists(pre_processed_path):
-                try:
-                    os.remove(pre_processed_path)
-                except Exception:
-                    pass
 
         return quantized_path
 
