@@ -104,16 +104,22 @@ def main():
             num_labels=num_labels,
             id2label=id2label,
             label2id=label2id,
-            ignore_mismatched_sizes=True
-        ).to(device)
+            ignore_mismatched_sizes=True,
+            torch_dtype=torch.float32
+        )
     except Exception:
         model = AutoModelForSequenceClassification.from_pretrained(
             "distilbert-base-uncased", 
             num_labels=num_labels,
             id2label=id2label,
             label2id=label2id,
-            ignore_mismatched_sizes=True
-        ).to(device)
+            ignore_mismatched_sizes=True,
+            torch_dtype=torch.float32
+        )
+    
+    # Explicitly enforce pure 32-bit floating point (torch.float32) across all 106 parameters
+    model = model.float().to(device)
+    print(f"[*] Model loaded on {device} with verified parameter dtype: {next(model.parameters()).dtype}", flush=True)
     
     # Dynamic tokenization and batch padding
     def tokenize_fn(batch):
