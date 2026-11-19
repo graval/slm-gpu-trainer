@@ -32,42 +32,163 @@ from edgeshield.pipeline import EdgeShieldPipeline
 from edgeshield.taxonomy import MITRE_ATTACK_TAXONOMY, TECHNIQUE_TO_ID, ID_TO_TECHNIQUE, AttackKnowledgeGraph
 from edgeshield.data.loader import load_edgeshield_lsa_data, load_edgeshield_bpd_data
 
+def resolve_path(path_str):
+    """Intelligently resolves data and model paths across local, subfolder, and Kaggle environments."""
+    if not path_str or os.path.exists(path_str):
+        return path_str
+    # Check inside slm-tr/
+    alt_slm = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), path_str)
+    if os.path.exists(alt_slm):
+        return alt_slm
+    # Check parent workspace
+    alt_parent = os.path.join(os.getcwd(), path_str)
+    if os.path.exists(alt_parent):
+        return alt_parent
+    # Check Kaggle input paths
+    basename = os.path.basename(path_str)
+    kaggle_paths = [
+        f"/kaggle/input/lateral-movement-dataset-lmd-2023/{basename}",
+        f"/kaggle/input/edgeshield-slm-training/{basename}",
+        f"/kaggle/working/{basename}",
+        f"/kaggle/working/slm-tr/{path_str}"
+    ]
+    for kp in kaggle_paths:
+        if os.path.exists(kp):
+            return kp
+    return path_str
+
 def parse_args():
     parser = argparse.ArgumentParser(description="EdgeShield Comprehensive Benchmark Suite")
     parser.add_argument("--samples", "--num_samples", dest="samples", type=int, default=1000, help="Number of evaluation samples per stream")
     parser.add_argument("--lsa_samples", type=int, default=None, help="LSA test evaluation samples")
     parser.add_argument("--bpd_samples", type=int, default=None, help="BPD test evaluation samples")
-    parser.add_argument("--lsa_model", type=str, default="models/edgeshield_lsa_deberta", help="Path to trained LSA model checkpoint")
-    parser.add_argument("--bpd_model", type=str, default="models/edgeshield_bpd", help="Path to trained BPD model checkpoint")
+    parser.add_argument("--lsa_model", type=str, default="models_v7/edgeshield_lsa_deberta", help="Path to trained LSA model checkpoint")
+    parser.add_argument("--bpd_model", type=str, default="models_v7/edgeshield_bpd_qwen", help="Path to trained BPD model checkpoint")
     parser.add_argument("--device", type=str, default=None, help="Execution device (cuda/cpu)")
     parser.add_argument("--optc_path", type=str, default="data/optc_test_benchmark.csv", help="Path to OpTC benchmark CSV")
     parser.add_argument("--ransomware_path", type=str, default="data/ransomware_behavioral_traces.csv", help="Path to ransomware CSV")
     parser.add_argument("--lmd_path", type=str, default="data/lmd_2023_dataset.csv", help="Path to LMD-2023 CSV")
     parser.add_argument("--export_json", type=str, default="benchmark_results.json", help="Path to export benchmark JSON")
     parser.add_argument("--export_summary", action="store_true", default=True, help="Export benchmark summary JSON")
-    return parser.parse_args()
+    args = parser.parse_args()
+    
+    args.lsa_model = resolve_path(args.lsa_model)
+    args.bpd_model = resolve_path(args.bpd_model)
+    args.optc_path = resolve_path(args.optc_path)
+    args.ransomware_path = resolve_path(args.ransomware_path)
+    args.lmd_path = resolve_path(args.lmd_path)
+    return args
 
 def evaluate_baseline_classifiers(train_texts, train_labels, test_texts, test_labels):
-    """Evaluates traditional ML baselines (TF-IDF + Random Forest / Gradient Boosted heuristics)."""
+    """
+    Evaluates traditional ML baselines 100% LIVE on the exact same dataset split:
+    Random Forest, XGBoost / GBDT, LightGBM / HistGBDT, and Decision Tree.
+    All metrics (Accuracy, Macro F1, Precision, Recall, Latency) are calculated live with zero hardcoding.
+    """
+    train_texts = [str(t) for t in train_texts]
+    test_texts = [str(t) for t in test_texts]
+    train_labels = np.array(train_labels, dtype=int)
+    test_labels = np.array(test_labels, dtype=int)
+
     vectorizer = TfidfVectorizer(max_features=1000)
     X_train = vectorizer.fit_transform(train_texts)
     X_test = vectorizer.transform(test_texts)
     
+    results = {}
+    
+    # 1. Random Forest Classifier (Live)
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
     t0 = time.perf_counter()
     rf.fit(X_train, train_labels)
-    preds = rf.predict(X_test)
-    latency = ((time.perf_counter() - t0) * 1000.0) / max(1, len(test_texts))
-    
-    acc = accuracy_score(test_labels, preds) * 100
-    p, r, f1, _ = precision_recall_fscore_support(test_labels, preds, average="macro", zero_division=0)
-    return {
-        "accuracy": round(acc, 2),
-        "f1_macro": round(f1 * 100, 2),
-        "precision": round(p * 100, 2),
-        "recall": round(r * 100, 2),
-        "avg_latency_ms": round(latency, 2)
+    preds_rf = rf.predict(X_test)
+    lat_rf = ((time.perf_counter() - t0) * 1000.0) / max(1, len(test_texts))
+    acc_rf = accuracy_score(test_labels, preds_rf) * 100
+    p_rf, r_rf, f1_rf, _ = precision_recall_fscore_support(test_labels, preds_rf, average="macro", zero_division=0)
+    results["Random Forest Baseline"] = {
+        "framework": "Random Forest Baseline",
+        "accuracy": round(float(acc_rf), 2),
+        "f1_macro": round(float(f1_rf * 100), 2),
+        "precision": round(float(p_rf * 100), 2),
+        "recall": round(float(r_rf * 100), 2),
+        "latency_ms": round(float(lat_rf), 2),
+        "source": "Empirical Live Evaluation"
     }
+
+    # 2. Decision Tree Classifier (Live)
+    from sklearn.tree import DecisionTreeClassifier
+    dt = DecisionTreeClassifier(max_depth=10, random_state=42)
+    t0 = time.perf_counter()
+    dt.fit(X_train, train_labels)
+    preds_dt = dt.predict(X_test)
+    lat_dt = ((time.perf_counter() - t0) * 1000.0) / max(1, len(test_texts))
+    acc_dt = accuracy_score(test_labels, preds_dt) * 100
+    p_dt, r_dt, f1_dt, _ = precision_recall_fscore_support(test_labels, preds_dt, average="macro", zero_division=0)
+    results["Decision Tree Heuristic"] = {
+        "framework": "Decision Tree Heuristic",
+        "accuracy": round(float(acc_dt), 2),
+        "f1_macro": round(float(f1_dt * 100), 2),
+        "precision": round(float(p_dt * 100), 2),
+        "recall": round(float(r_dt * 100), 2),
+        "latency_ms": round(float(lat_dt), 2),
+        "source": "Empirical Live Evaluation"
+    }
+
+    # 3. XGBoost / Gradient Boosting (Live)
+    try:
+        import xgboost as xgb
+        clf_xgb = xgb.XGBClassifier(n_estimators=100, max_depth=6, random_state=42, eval_metric="mlogloss")
+        name_xgb = "XGBoost Classifier"
+    except Exception:
+        from sklearn.ensemble import GradientBoostingClassifier
+        clf_xgb = GradientBoostingClassifier(n_estimators=100, max_depth=6, random_state=42)
+        name_xgb = "Gradient Boosting (XGBoost)"
+        
+    t0 = time.perf_counter()
+    clf_xgb.fit(X_train, train_labels)
+    preds_xgb = clf_xgb.predict(X_test)
+    lat_xgb = ((time.perf_counter() - t0) * 1000.0) / max(1, len(test_texts))
+    acc_xgb = accuracy_score(test_labels, preds_xgb) * 100
+    p_xgb, r_xgb, f1_xgb, _ = precision_recall_fscore_support(test_labels, preds_xgb, average="macro", zero_division=0)
+    results["XGBoost Classifier"] = {
+        "framework": name_xgb,
+        "accuracy": round(float(acc_xgb), 2),
+        "f1_macro": round(float(f1_xgb * 100), 2),
+        "precision": round(float(p_xgb * 100), 2),
+        "recall": round(float(r_xgb * 100), 2),
+        "latency_ms": round(float(lat_xgb), 2),
+        "source": "Empirical Live Evaluation"
+    }
+
+    # 4. LightGBM / HistGradientBoosting (Live)
+    try:
+        import lightgbm as lgb
+        clf_lgb = lgb.LGBMClassifier(n_estimators=100, random_state=42, verbose=-1)
+        name_lgb = "LightGBM Classifier"
+        t0 = time.perf_counter()
+        clf_lgb.fit(X_train.astype(np.float32), train_labels)
+        preds_lgb = clf_lgb.predict(X_test.astype(np.float32))
+    except Exception:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        clf_lgb = HistGradientBoostingClassifier(max_iter=100, random_state=42)
+        name_lgb = "HistGradientBoosting (LightGBM)"
+        t0 = time.perf_counter()
+        clf_lgb.fit(X_train.toarray(), train_labels)
+        preds_lgb = clf_lgb.predict(X_test.toarray())
+        
+    lat_lgb = ((time.perf_counter() - t0) * 1000.0) / max(1, len(test_texts))
+    acc_lgb = accuracy_score(test_labels, preds_lgb) * 100
+    p_lgb, r_lgb, f1_lgb, _ = precision_recall_fscore_support(test_labels, preds_lgb, average="macro", zero_division=0)
+    results["LightGBM Classifier"] = {
+        "framework": name_lgb,
+        "accuracy": round(float(acc_lgb), 2),
+        "f1_macro": round(float(f1_lgb * 100), 2),
+        "precision": round(float(p_lgb * 100), 2),
+        "recall": round(float(r_lgb * 100), 2),
+        "latency_ms": round(float(lat_lgb), 2),
+        "source": "Empirical Live Evaluation"
+    }
+    
+    return results
 
 def main():
     args = parse_args()
@@ -189,10 +310,10 @@ def main():
         })
 
     # 6. Model Head-to-Head & Baselines Comparison Table
-    print("[*] [5/5] Generating Empirical Model Comparison Matrix...")
+    print("[*] [5/5] Generating Empirical Model Comparison Matrix (100% Live)...")
     
-    # Baseline comparison
-    rf_baseline = evaluate_baseline_classifiers(
+    # Live ML Baseline evaluation across identical train/test splits
+    live_baselines = evaluate_baseline_classifiers(
         lsa_train["formatted_text"], lsa_train["label"],
         lsa_test["formatted_text"], lsa_test["label"]
     )
@@ -225,8 +346,8 @@ def main():
         except Exception:
             pass
 
-    # Compile Model Head-to-Head Benchmark Table (Paper Sec VI / Table III)
-    # Recalculated parameters, memory footprints (INT8 runtime vs INT4), and empirical latencies
+    # Compile Model Head-to-Head Benchmark Table (Table III)
+    # EdgeShield metrics are strictly live; external general-purpose models are documented as Literature References
     model_comparisons = [
         {
             "model": "Phi-3 Mini (3.8B Instruct)",
@@ -238,8 +359,9 @@ def main():
             "latency_cpu_ms": 142.50,
             "latency_onnx_int8_ms": 28.40,
             "ram_fp16_gb": 7.64,
-            "ram_int8_gb": 3.90,  # 3.90 GB (INT8 weights + KV) / 2.10 GB (4-bit Q4)
-            "ram_display": "3.90 GB (2.10 GB Q4)"
+            "ram_int8_gb": 3.90,
+            "ram_display": "3.90 GB (2.10 GB Q4)",
+            "source": "Literature Baseline Reference"
         },
         {
             "model": "Gemma-2 (2.6B IT)",
@@ -251,8 +373,9 @@ def main():
             "latency_cpu_ms": 98.20,
             "latency_onnx_int8_ms": 21.60,
             "ram_fp16_gb": 5.22,
-            "ram_int8_gb": 2.70,  # 2.70 GB (INT8) / 1.50 GB (4-bit Q4)
-            "ram_display": "2.70 GB (1.50 GB Q4)"
+            "ram_int8_gb": 2.70,
+            "ram_display": "2.70 GB (1.50 GB Q4)",
+            "source": "Literature Baseline Reference"
         },
         {
             "model": "TinyLlama (1.1B Chat)",
@@ -264,31 +387,33 @@ def main():
             "latency_cpu_ms": 42.10,
             "latency_onnx_int8_ms": 9.80,
             "ram_fp16_gb": 2.20,
-            "ram_int8_gb": 1.15,  # 1.15 GB (INT8) / 0.70 GB (4-bit Q4)
-            "ram_display": "1.15 GB (0.70 GB Q4)"
+            "ram_int8_gb": 1.15,
+            "ram_display": "1.15 GB (0.70 GB Q4)",
+            "source": "Literature Baseline Reference"
         },
         {
             "model": "DeBERTa-v3 Small (EdgeShield)",
-            "params": "44M*",  # 44M backbone encoder weights (142M total including 128k embeddings)
-            "accuracy": round(lsa_acc, 2) if lsa_acc > 50.0 else 99.45,
-            "f1_macro": round(lsa_f1, 2) if lsa_f1 > 50.0 else 99.38,
-            "precision": round(lsa_p, 2) if lsa_p > 50.0 else 99.51,
-            "recall": round(lsa_r, 2) if lsa_r > 50.0 else 99.25,
-            "latency_cpu_ms": round(lsa_avg_latency, 2),
-            "latency_onnx_int8_ms": dynamic_int8_lat if dynamic_int8_lat is not None else 11.71,
+            "params": "44M*",
+            "accuracy": round(float(lsa_acc), 2),
+            "f1_macro": round(float(lsa_f1), 2),
+            "precision": round(float(lsa_p), 2),
+            "recall": round(float(lsa_r), 2),
+            "latency_cpu_ms": round(float(lsa_avg_latency), 2),
+            "latency_onnx_int8_ms": round(float(dynamic_int8_lat), 2) if dynamic_int8_lat is not None else "N/A",
             "ram_fp16_gb": 0.28,
-            "ram_int8_gb": 0.05,  # 0.05 GB (50 MB active runtime RAM; 121.96 MB INT8 file on disk)
-            "ram_display": "0.05 GB (50 MB RAM)"
+            "ram_int8_gb": 0.05,
+            "ram_display": "0.05 GB (50 MB RAM)",
+            "source": "Empirical Live Evaluation"
         }
     ]
 
     baseline_comparisons = [
-        {"framework": "Signature IDS / Snort Rules", "f1_macro": 52.40, "precision": 91.20, "recall": 36.80, "latency_ms": 0.25},
-        {"framework": "XGBoost Classifier", "f1_macro": 55.50, "precision": 58.20, "recall": 53.10, "latency_ms": 1.20},
-        {"framework": "LightGBM Classifier", "f1_macro": 43.20, "precision": 48.60, "recall": 38.90, "latency_ms": 0.95},
-        {"framework": "Random Forest Baseline", "f1_macro": rf_baseline["f1_macro"], "precision": rf_baseline["precision"], "recall": rf_baseline["recall"], "latency_ms": rf_baseline["avg_latency_ms"]},
-        {"framework": "LSTM Sequence Model", "f1_macro": 78.60, "precision": 81.40, "recall": 76.00, "latency_ms": 8.50},
-        {"framework": "EdgeShield Dual-Stream SLM", "f1_macro": 99.38, "precision": 99.51, "recall": 99.25, "latency_ms": round(lsa_avg_latency, 2)}
+        {"framework": "Signature IDS / Snort Rules", "f1_macro": 52.40, "precision": 91.20, "recall": 36.80, "latency_ms": 0.25, "source": "Literature Reference"},
+        live_baselines["Decision Tree Heuristic"],
+        live_baselines["Random Forest Baseline"],
+        live_baselines["XGBoost Classifier"],
+        live_baselines["LightGBM Classifier"],
+        {"framework": "EdgeShield Dual-Stream SLM", "f1_macro": round(float(lsa_f1), 2), "precision": round(float(lsa_p), 2), "recall": round(float(lsa_r), 2), "latency_ms": round(float(lsa_avg_latency), 2), "source": "Empirical Live Evaluation"}
     ]
 
     # Print Summary Tables

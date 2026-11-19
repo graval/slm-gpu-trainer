@@ -1,17 +1,17 @@
 {
-  "model": "slm-tr\\models\\onnx_edgeshield\\edgeshield_lsa_int8.onnx",
-  "model_size_mb": 64.51,
+  "model": "c:\\workspaceag\\slmgpuv1\\slm-tr\\models_v4\\models\\onnx_edgeshield\\edgeshield_lsa_int8.onnx",
+  "model_size_mb": 121.96,
   "providers": [
     "CPUExecutionProvider"
   ],
-  "runs": 50,
+  "runs": 500,
   "batch_size": 1,
   "sequence_length": 128,
-  "mean_ms": 21.55,
-  "median_ms": 17.49,
-  "p95_ms": 47.37,
-  "min_ms": 8.31,
-  "max_ms": 62.55,
-  "std_ms": 12.89,
-  "throughput_per_sec": 46.4
+  "mean_ms": 53.91,
+  "median_ms": 49.2,
+  "p95_ms": 99.67,
+  "min_ms": 18.11,
+  "max_ms": 207.74,
+  "std_ms": 25.5,
+  "throughput_per_sec": 18.6
 }

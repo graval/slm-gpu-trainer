@@ -47,7 +47,8 @@ class AttentionThreatScoringHead(nn.Module):
         """
         attn_logits = self.query(hidden_states).squeeze(-1) # [batch_size, seq_len]
         if attention_mask is not None:
-            attn_logits = attn_logits.masked_fill(attention_mask == 0, -1e9)
+            mask_value = -1e4 if attn_logits.dtype == torch.float16 else -1e9
+            attn_logits = attn_logits.masked_fill(attention_mask == 0, mask_value)
         attn_weights = F.softmax(attn_logits, dim=-1) # [batch_size, seq_len]
         
         # Weighted context pooling
@@ -157,8 +158,10 @@ class BehavioralPatternDetector:
         self.model = self._load_or_init_model(model_name_or_path)
         self.scoring_head = AttentionThreatScoringHead(hidden_dim=getattr(self.model.config, "hidden_size", 768))
         
+        # Ensure scoring_head matches model device and dtype
+        model_dtype = next(self.model.parameters()).dtype
         self.model.to(self.device)
-        self.scoring_head.to(self.device)
+        self.scoring_head.to(device=self.device, dtype=model_dtype)
         self.model.eval()
         self.scoring_head.eval()
 
@@ -218,6 +221,9 @@ class BehavioralPatternDetector:
             outputs = self.model(**model_inputs, output_hidden_states=True)
             if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
                 last_hidden = outputs.hidden_states[-1] # [batch, seq, dim]
+                # Match scoring_head dtype
+                head_dtype = next(self.scoring_head.parameters()).dtype
+                last_hidden = last_hidden.to(dtype=head_dtype)
                 attn_mask = inputs.get("attention_mask")
                 threat_score_tensor, _ = self.scoring_head(last_hidden, attn_mask)
                 raw_score = float(threat_score_tensor[0, 0].cpu().item())
