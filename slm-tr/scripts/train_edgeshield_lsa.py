@@ -150,10 +150,14 @@ def main():
     ce_loss_fn = nn.CrossEntropyLoss()
     contrastive_fn = SupervisedContrastiveLoss(temperature=0.07) if args.use_contrastive else None
     
-    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps)...", flush=True)
+    use_amp = (device.type == "cuda")
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    
+    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps, AMP={use_amp})...", flush=True)
     model.train()
     start_time = time.time()
     
+    log_interval = max(20, total_steps // 40)
     step = 0
     for epoch in range(1, args.epochs + 1):
         epoch_loss = 0.0
@@ -164,27 +168,34 @@ def main():
             labels = batch["labels"].to(device)
             
             optimizer.zero_grad()
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-            logits = outputs.logits
-            
-            ce_loss = ce_loss_fn(logits, labels)
-            
-            if contrastive_fn and hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
-                pooled_embeds = outputs.hidden_states[-1][:, 0, :] # [CLS] embedding
-                cl_loss = contrastive_fn(pooled_embeds, labels)
-                cl_loss = torch.nan_to_num(cl_loss, nan=0.0, posinf=0.0, neginf=0.0)
-                total_loss = ce_loss + 0.3 * cl_loss
-            else:
-                total_loss = ce_loss
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+                logits = outputs.logits
+                ce_loss = ce_loss_fn(logits, labels)
                 
-            total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+                if contrastive_fn and hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
+                    pooled_embeds = outputs.hidden_states[-1][:, 0, :] # [CLS] embedding
+                    cl_loss = contrastive_fn(pooled_embeds, labels)
+                    cl_loss = torch.nan_to_num(cl_loss, nan=0.0, posinf=0.0, neginf=0.0)
+                    total_loss = ce_loss + 0.3 * cl_loss
+                else:
+                    total_loss = ce_loss
+                
+            if use_amp:
+                scaler.scale(total_loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+                
             scheduler.step()
-            
             epoch_loss += total_loss.item()
             
-            if step % 10 == 0 or step == total_steps:
+            if step % log_interval == 0 or step == total_steps:
                 print(f"  [Epoch {epoch}/{args.epochs} | Step {step}/{total_steps}] Loss: {total_loss.item():.4f} | LR: {scheduler.get_last_lr()[0]:.2e}", flush=True)
 
     elapsed = time.time() - start_time
@@ -195,6 +206,75 @@ def main():
     model.cpu().save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"[+] Model checkpoint and tokenizer saved to: {args.output_dir}")
+    
+    # 4. Evaluation on Held-Out Test Set
+    print("\n[*] Evaluating LSA Model on Balanced Held-Out Test Split...", flush=True)
+    model.to(device)
+    model.eval()
+    test_loader = DataLoader(
+        test_tokenized,
+        batch_size=args.batch_size * 2,
+        shuffle=False,
+        collate_fn=collate_fn
+    )
+    
+    all_preds = []
+    all_targets = []
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            preds = torch.argmax(outputs.logits, dim=-1)
+            all_preds.extend(preds.cpu().numpy().tolist())
+            all_targets.extend(labels.cpu().numpy().tolist())
+            
+    from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+    acc = accuracy_score(all_targets, all_preds)
+    p_macro, r_macro, f1_macro, _ = precision_recall_fscore_support(all_targets, all_preds, average="macro", zero_division=0)
+    p_cls, r_cls, f1_cls, _ = precision_recall_fscore_support(all_targets, all_preds, average=None, labels=[0, 1, 2], zero_division=0)
+    
+    normal_indices = [i for i, t in enumerate(all_targets) if t == 0]
+    fp_count = sum(1 for i in normal_indices if all_preds[i] != 0)
+    fpr = (fp_count / len(normal_indices)) * 100.0 if normal_indices else 0.0
+    
+    attack_indices = [i for i, t in enumerate(all_targets) if t in (1, 2)]
+    attack_detected = sum(1 for i in attack_indices if all_preds[i] in (1, 2))
+    attack_recall = (attack_detected / len(attack_indices)) * 100.0 if attack_indices else 0.0
+    
+    print("=" * 70)
+    print("           [+] LSA EVALUATION RESULTS (HELD-OUT BALANCED TEST SET)")
+    print("=" * 70)
+    print(f"  Overall Accuracy:            {acc * 100:.2f}%")
+    print(f"  Macro F1-Score:              {f1_macro * 100:.2f}%")
+    print(f"  Lateral Movement Recall:     {attack_recall:.2f}%  (Target: >96%)")
+    print(f"  False Positive Rate (FPR):   {fpr:.2f}%  (Target: <0.20%)")
+    print("-" * 70)
+    print(f"  Class 0 [Normal]:            Precision={p_cls[0]*100:.2f}% | Recall={r_cls[0]*100:.2f}% | F1={f1_cls[0]*100:.2f}%")
+    print(f"  Class 1 [EoRS]:              Precision={p_cls[1]*100:.2f}% | Recall={r_cls[1]*100:.2f}% | F1={f1_cls[1]*100:.2f}%")
+    print(f"  Class 2 [EoHT]:              Precision={p_cls[2]*100:.2f}% | Recall={r_cls[2]*100:.2f}% | F1={f1_cls[2]*100:.2f}%")
+    print("=" * 70)
+    
+    metrics = {
+        "accuracy": round(float(acc * 100), 2),
+        "macro_f1": round(float(f1_macro * 100), 2),
+        "macro_precision": round(float(p_macro * 100), 2),
+        "macro_recall": round(float(r_macro * 100), 2),
+        "lateral_movement_recall": round(float(attack_recall), 2),
+        "false_positive_rate": round(float(fpr), 2),
+        "class_metrics": {
+            "Normal": {"precision": round(float(p_cls[0]*100), 2), "recall": round(float(r_cls[0]*100), 2), "f1": round(float(f1_cls[0]*100), 2)},
+            "EoRS": {"precision": round(float(p_cls[1]*100), 2), "recall": round(float(r_cls[1]*100), 2), "f1": round(float(f1_cls[1]*100), 2)},
+            "EoHT": {"precision": round(float(p_cls[2]*100), 2), "recall": round(float(r_cls[2]*100), 2), "f1": round(float(f1_cls[2]*100), 2)},
+        },
+        "training_time_seconds": round(elapsed, 2)
+    }
+    with open(os.path.join(args.output_dir, "eval_metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"[+] LSA Evaluation metrics written to: {os.path.join(args.output_dir, 'eval_metrics.json')}")
 
 if __name__ == "__main__":
     main()
