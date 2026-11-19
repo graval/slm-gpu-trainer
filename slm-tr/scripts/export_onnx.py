@@ -12,17 +12,18 @@ import subprocess
 import torch
 from pathlib import Path
 
-# Ensure onnxscript is available (required by PyTorch 2.4+ / Python 3.12+ for ONNX exporter)
-try:
-    import onnxscript
-except ImportError:
-    print("[*] Installing required 'onnxscript' package for PyTorch ONNX exporter...")
+# Ensure onnx, onnxruntime, and onnxscript are available (required for ONNX export & INT8 PTQ)
+for pkg in ["onnx", "onnxruntime", "onnxscript"]:
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "onnxscript"])
-        import onnxscript
-        print("[+] 'onnxscript' installed successfully.")
-    except Exception as e:
-        print(f"[!] Warning: Could not auto-install onnxscript: {e}")
+        __import__(pkg)
+    except ImportError:
+        print(f"[*] Installing required '{pkg}' package for ONNX export/quantization...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", pkg])
+            __import__(pkg)
+            print(f"[+] '{pkg}' installed successfully.")
+        except Exception as e:
+            print(f"[!] Warning: Could not auto-install {pkg}: {e}")
 
 # Ensure slm-tr root is on sys.path
 CURRENT_DIR = Path(__file__).resolve().parent

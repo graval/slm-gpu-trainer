@@ -22,8 +22,22 @@ from transformers import (
     BitsAndBytesConfig,
     TrainerCallback
 )
-from peft import LoraConfig, get_peft_model, TaskType
-from trl import SFTTrainer, SFTConfig
+try:
+    from peft import LoraConfig, get_peft_model, TaskType
+except ImportError:
+    import subprocess
+    print("[*] Installing required 'peft' package for LoRA fine-tuning...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "peft>=0.9.0"])
+    from peft import LoraConfig, get_peft_model, TaskType
+
+try:
+    from trl import SFTTrainer, SFTConfig
+except ImportError:
+    import subprocess
+    print("[*] Installing required 'trl' package for SFTTrainer...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "trl>=0.8.0"])
+    from trl import SFTTrainer, SFTConfig
+
 from data.loader import load_lmd_for_decoder
 
 class ProgressCallback(TrainerCallback):

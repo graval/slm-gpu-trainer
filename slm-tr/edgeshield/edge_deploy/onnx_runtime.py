@@ -108,8 +108,18 @@ class EdgeDeploymentEngine:
         Reduces checkpoint size by ~70% (3.3x compression) while keeping latency < 20 ms per window.
         Quantizes MatMul projections and the large 128k-token Gather embedding table.
         """
+        global quantize_dynamic, QuantType, ONNX_AVAILABLE, ort
         if not ONNX_AVAILABLE or quantize_dynamic is None:
-            raise RuntimeError("ONNX Runtime quantization tools not available.")
+            try:
+                import subprocess, sys
+                print("[*] Attempting on-the-fly installation of 'onnxruntime'...")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "onnxruntime"])
+                import onnxruntime as ort
+                from onnxruntime.quantization import quantize_dynamic, QuantType
+                ONNX_AVAILABLE = True
+                print("[+] Successfully installed and loaded onnxruntime.")
+            except Exception as e:
+                raise RuntimeError(f"ONNX Runtime quantization tools not available: {e}")
 
         quantized_path = onnx_model_path.replace(".onnx", "_int8.onnx")
 

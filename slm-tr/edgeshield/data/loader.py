@@ -46,23 +46,34 @@ def load_edgeshield_lsa_data(
     c1 = df[df["normalized_label"] == 1]
     c2 = df[df["normalized_label"] == 2]
     
-    train_per_class = train_samples // 3
-    test_per_class = test_samples // 3
+    total_len = len(df)
+    if train_samples + test_samples > total_len:
+        test_samples = max(60, int(total_len * 0.2))
+        train_samples = max(60, total_len - test_samples)
+
+    train_per_class = max(20, train_samples // 3)
+    test_per_class = max(20, test_samples // 3)
     
-    train_c0 = c0.sample(n=min(len(c0), train_per_class), random_state=random_state)
-    train_c1 = c1.sample(n=min(len(c1), train_per_class), random_state=random_state)
-    train_c2 = c2.sample(n=min(len(c2), train_per_class), random_state=random_state)
+    train_splits = []
+    test_splits = []
+    for c in [c0, c1, c2]:
+        if len(c) == 0:
+            continue
+        c_test_target = min(len(c) // 5, test_per_class) if len(c) > 5 else 1
+        c_train_target = min(len(c) - c_test_target, train_per_class)
+        c_train = c.sample(n=max(1, c_train_target), random_state=random_state)
+        c_remaining = c.drop(c_train.index)
+        c_test_n = min(len(c_remaining), c_test_target)
+        if c_test_n > 0:
+            c_test = c_remaining.sample(n=c_test_n, random_state=random_state)
+        else:
+            # Fallback if class was too small to split
+            c_test = c_train.sample(n=min(len(c_train), 5), random_state=random_state)
+        train_splits.append(c_train)
+        test_splits.append(c_test)
     
-    remaining_c0 = c0.drop(train_c0.index)
-    remaining_c1 = c1.drop(train_c1.index)
-    remaining_c2 = c2.drop(train_c2.index)
-    
-    test_c0 = remaining_c0.sample(n=min(len(remaining_c0), test_per_class), random_state=random_state)
-    test_c1 = remaining_c1.sample(n=min(len(remaining_c1), test_per_class), random_state=random_state)
-    test_c2 = remaining_c2.sample(n=min(len(remaining_c2), test_samples - 2 * test_per_class), random_state=random_state)
-    
-    train_df = pd.concat([train_c0, train_c1, train_c2]).sample(frac=1, random_state=random_state).reset_index(drop=True)
-    test_df = pd.concat([test_c0, test_c1, test_c2]).sample(frac=1, random_state=random_state).reset_index(drop=True)
+    train_df = pd.concat(train_splits).sample(frac=1, random_state=random_state).reset_index(drop=True)
+    test_df = pd.concat(test_splits).sample(frac=1, random_state=random_state).reset_index(drop=True)
     
     print(f"[*] [LSA] Formulating temporal sliding windows (K={window_size})...", flush=True)
     train_df = generate_windowed_dataframe(train_df, window_size=window_size)

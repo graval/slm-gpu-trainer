@@ -118,14 +118,17 @@ def main():
         if (idx + 1) % 200 == 0 or (idx + 1) == len(lsa_test):
             print(f"    -> LSA Evaluated: {idx + 1}/{len(lsa_test)} records...", flush=True)
         
-    lsa_acc = accuracy_score(lsa_actuals, lsa_preds) * 100
-    lsa_p, lsa_r, lsa_f1, _ = precision_recall_fscore_support(lsa_actuals, lsa_preds, average="macro", zero_division=0)
-    lsa_p, lsa_r, lsa_f1 = lsa_p * 100, lsa_r * 100, lsa_f1 * 100
-    lsa_fp = sum(1 for a, p in zip(lsa_actuals, lsa_preds) if a == 0 and p == 1)
-    lsa_fn = sum(1 for a, p in zip(lsa_actuals, lsa_preds) if a == 1 and p == 0)
-    lsa_fpr = (lsa_fp / max(1, len(lsa_actuals))) * 100
-    lsa_fnr = (lsa_fn / max(1, len(lsa_actuals))) * 100
-    lsa_avg_latency = float(np.mean(lsa_latencies))
+    if len(lsa_actuals) > 0:
+        lsa_acc = accuracy_score(lsa_actuals, lsa_preds) * 100
+        lsa_p, lsa_r, lsa_f1, _ = precision_recall_fscore_support(lsa_actuals, lsa_preds, average="macro", zero_division=0)
+        lsa_p, lsa_r, lsa_f1 = lsa_p * 100, lsa_r * 100, lsa_f1 * 100
+        lsa_fp = sum(1 for a, p in zip(lsa_actuals, lsa_preds) if a == 0 and p == 1)
+        lsa_fn = sum(1 for a, p in zip(lsa_actuals, lsa_preds) if a == 1 and p == 0)
+        lsa_fpr = (lsa_fp / max(1, len(lsa_actuals))) * 100
+        lsa_fnr = (lsa_fn / max(1, len(lsa_actuals))) * 100
+        lsa_avg_latency = float(np.mean(lsa_latencies)) if lsa_latencies else 0.0
+    else:
+        lsa_acc, lsa_p, lsa_r, lsa_f1, lsa_fpr, lsa_fnr, lsa_avg_latency = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     
     # 4. Evaluate BPD Stream
     print("\n[*] [3/5] Benchmarking Stream B: Behavioral Pattern Detector (BPD)...")
@@ -140,19 +143,33 @@ def main():
         if (idx + 1) % 200 == 0 or (idx + 1) == len(bpd_test):
             print(f"    -> BPD Evaluated: {idx + 1}/{len(bpd_test)} records...", flush=True)
         
-    bpd_acc = accuracy_score(bpd_actuals, bpd_preds) * 100
-    bpd_p, bpd_r, bpd_f1, _ = precision_recall_fscore_support(bpd_actuals, bpd_preds, average="macro", zero_division=0)
-    bpd_p, bpd_r, bpd_f1 = bpd_p * 100, bpd_r * 100, bpd_f1 * 100
-    bpd_fp = sum(1 for a, p in zip(bpd_actuals, bpd_preds) if a == 0 and p == 1)
-    bpd_fn = sum(1 for a, p in zip(bpd_actuals, bpd_preds) if a == 1 and p == 0)
-    bpd_fpr = (bpd_fp / max(1, len(bpd_actuals))) * 100
-    bpd_fnr = (bpd_fn / max(1, len(bpd_actuals))) * 100
-    bpd_avg_latency = float(np.mean(bpd_latencies))
+    if len(bpd_actuals) > 0:
+        bpd_acc = accuracy_score(bpd_actuals, bpd_preds) * 100
+        bpd_p, bpd_r, bpd_f1, _ = precision_recall_fscore_support(bpd_actuals, bpd_preds, average="macro", zero_division=0)
+        bpd_p, bpd_r, bpd_f1 = bpd_p * 100, bpd_r * 100, bpd_f1 * 100
+        bpd_fp = sum(1 for a, p in zip(bpd_actuals, bpd_preds) if a == 0 and p == 1)
+        bpd_fn = sum(1 for a, p in zip(bpd_actuals, bpd_preds) if a == 1 and p == 0)
+        bpd_fpr = (bpd_fp / max(1, len(bpd_actuals))) * 100
+        bpd_fnr = (bpd_fn / max(1, len(bpd_actuals))) * 100
+        bpd_avg_latency = float(np.mean(bpd_latencies)) if bpd_latencies else 0.0
+    else:
+        bpd_acc, bpd_p, bpd_r, bpd_f1, bpd_fpr, bpd_fnr, bpd_avg_latency = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
     # 5. Dual-Stream Synergy & Coordinated Intrusion Detection
     print("[*] [4/5] Benchmarking Dual-Stream Fusion & Multi-Stage Attack Scenarios...")
-    with open("data/multi_stage_scenarios.json", "r", encoding="utf-8") as f:
-        scenarios = json.load(f)
+    scenarios_path = "data/multi_stage_scenarios.json"
+    if not os.path.exists(scenarios_path):
+        try:
+            from edgeshield.data.multi_stage_attack_dataset import generate_multi_stage_scenarios
+            generate_multi_stage_scenarios(scenarios_path)
+            print(f"[+] Auto-generated missing scenarios at {scenarios_path}")
+        except Exception as e:
+            print(f"[!] Warning: Could not auto-generate {scenarios_path}: {e}")
+
+    scenarios = []
+    if os.path.exists(scenarios_path):
+        with open(scenarios_path, "r", encoding="utf-8") as f:
+            scenarios = json.load(f)
         
     multi_stage_results = []
     for scen in scenarios:
