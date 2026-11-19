@@ -1,0 +1,76 @@
+{
+  "hardware": {
+    "cpu": "Intel Core Ultra 7 255H (16 logical cores)",
+    "gpu": "Integrated Intel Arc GPU (DirectX 12 / DirectML)",
+    "system_ram_gb": 31.37,
+    "os": "win32"
+  },
+  "configurations": {
+    "Stream A: LSA (Lateral Movement INT8)": {
+      "model_size_mb": 64.51,
+      "intel_arc_directml": {
+        "runs": 200,
+        "mean_ms": 16.8,
+        "std_ms": 0.8,
+        "median_p50_ms": 16.63,
+        "p90_ms": 17.78,
+        "p95_ms": 18.27,
+        "p99_ms": 19.97,
+        "min_ms": 15.75,
+        "max_ms": 20.2,
+        "throughput_fps": 59.5,
+        "inferences_per_minute": 3572.0,
+        "working_set_ram_mb": 270.46
+      },
+      "intel_core_ultra_cpu": {
+        "runs": 200,
+        "mean_ms": 20.91,
+        "std_ms": 12.31,
+        "median_p50_ms": 18.25,
+        "p90_ms": 38.89,
+        "p95_ms": 43.25,
+        "p99_ms": 54.65,
+        "min_ms": 6.9,
+        "max_ms": 58.89,
+        "throughput_fps": 47.8,
+        "inferences_per_minute": 2869.0,
+        "working_set_ram_mb": 340.95
+      },
+      "acceleration_speedup_ratio": 1.24,
+      "p95_latency_stability_ratio": 2.37
+    },
+    "Stream B: BPD (Ransomware INT8)": {
+      "model_size_mb": 64.51,
+      "intel_arc_directml": {
+        "runs": 200,
+        "mean_ms": 17.05,
+        "std_ms": 1.31,
+        "median_p50_ms": 16.76,
+        "p90_ms": 18.36,
+        "p95_ms": 18.75,
+        "p99_ms": 19.55,
+        "min_ms": 15.48,
+        "max_ms": 30.53,
+        "throughput_fps": 58.6,
+        "inferences_per_minute": 3518.0,
+        "working_set_ram_mb": 479.88
+      },
+      "intel_core_ultra_cpu": {
+        "runs": 200,
+        "mean_ms": 24.69,
+        "std_ms": 16.43,
+        "median_p50_ms": 21.65,
+        "p90_ms": 44.63,
+        "p95_ms": 54.64,
+        "p99_ms": 80.53,
+        "min_ms": 7.02,
+        "max_ms": 95.48,
+        "throughput_fps": 40.5,
+        "inferences_per_minute": 2430.0,
+        "working_set_ram_mb": 331.92
+      },
+      "acceleration_speedup_ratio": 1.45,
+      "p95_latency_stability_ratio": 2.91
+    }
+  }
+}
