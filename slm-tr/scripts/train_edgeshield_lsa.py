@@ -150,10 +150,15 @@ def main():
     ce_loss_fn = nn.CrossEntropyLoss()
     contrastive_fn = SupervisedContrastiveLoss(temperature=0.07) if args.use_contrastive else None
     
-    use_amp = (device.type == "cuda")
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    # Note: DeBERTa-v3 has a known attention logit overflow issue with standard fp16 AMP on NVIDIA GPUs.
+    # We only enable AMP if bfloat16 is natively supported; otherwise full FP32 is used to guarantee numerical stability.
+    is_deberta = "deberta" in args.model_name.lower()
+    bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    use_amp = (device.type == "cuda") and (not is_deberta or bf16_supported)
+    amp_dtype = torch.bfloat16 if bf16_supported else torch.float16
+    scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and amp_dtype == torch.float16))
     
-    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps, AMP={use_amp})...", flush=True)
+    print(f"[*] Beginning Training ({args.epochs} epochs, {total_steps} total steps, AMP={use_amp}, Dtype={amp_dtype if use_amp else torch.float32})...", flush=True)
     model.train()
     start_time = time.time()
     
@@ -168,7 +173,7 @@ def main():
             labels = batch["labels"].to(device)
             
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.cuda.amp.autocast(enabled=use_amp, dtype=amp_dtype):
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
                 logits = outputs.logits
                 ce_loss = ce_loss_fn(logits, labels)
@@ -226,7 +231,7 @@ def main():
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
             
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.cuda.amp.autocast(enabled=use_amp, dtype=amp_dtype):
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             preds = torch.argmax(outputs.logits, dim=-1)
             all_preds.extend(preds.cpu().numpy().tolist())
