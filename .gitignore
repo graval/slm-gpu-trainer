@@ -6,3 +6,7 @@ __pycache__/
 *.pyc
 *.onnx
 *.onnx.data
+*.zip
+models_v4/
+slm-tr/models_v4/
+

@@ -211,9 +211,11 @@ class BehavioralPatternDetector:
             padding=False,
             return_tensors="pt"
         ).to(self.device)
+        # DistilBERT does not use token_type_ids; keep only supported input tensors
+        model_inputs = {k: v for k, v in inputs.items() if k in ["input_ids", "attention_mask"]}
 
         with torch.no_grad():
-            outputs = self.model(**inputs, output_hidden_states=True)
+            outputs = self.model(**model_inputs, output_hidden_states=True)
             if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
                 last_hidden = outputs.hidden_states[-1] # [batch, seq, dim]
                 attn_mask = inputs.get("attention_mask")
