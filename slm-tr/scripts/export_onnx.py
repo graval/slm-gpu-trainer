@@ -70,7 +70,15 @@ def main():
 
     print("[*] Loading PyTorch model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(str(ckpt_path))
-    model = AutoModelForSequenceClassification.from_pretrained(str(ckpt_path))
+    hierarchical_pt = ckpt_path / "hierarchical_model.pt"
+    if hierarchical_pt.exists():
+        print(f"[*] Detected HierarchicalThreatDetector at: {hierarchical_pt}")
+        from edgeshield.lsa.hierarchical_model import HierarchicalThreatDetector
+        model = HierarchicalThreatDetector(model_name_or_path=str(ckpt_path))
+        state_dict = torch.load(str(hierarchical_pt), map_location="cpu")
+        model.load_state_dict(state_dict)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(str(ckpt_path))
 
     # Sanitize any NaN or Inf in PyTorch parameters before export
     nan_count = 0

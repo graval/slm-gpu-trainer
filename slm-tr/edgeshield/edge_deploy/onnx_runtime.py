@@ -74,7 +74,15 @@ class EdgeDeploymentEngine:
                 self.base_model = base_model
             def forward(self, input_ids, attention_mask):
                 out = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
-                return out.logits
+                if hasattr(out, "logits"):
+                    return out.logits
+                elif isinstance(out, dict):
+                    if "threat_logits" in out:
+                        return out["threat_logits"]
+                    return list(out.values())[0]
+                elif isinstance(out, (tuple, list)):
+                    return out[0]
+                return out
 
         wrapper = OnnxWrapper(pytorch_model).cpu().eval()
 
