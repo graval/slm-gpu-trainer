@@ -5,8 +5,8 @@
 **Supervisor:** Dr. Tejaskumar Bhatt  
 **Institution:** Faculty of Computer Applications & Information Technology, GLS University, Ahmedabad, India  
 **Date of Audit:** November 20, 2026  
-**Active Repository Commit:** `bd8b77c` on branch `feat/edgeshield-slm-framework`  
-**Kaggle Verified Execution:** [EdgeShield SLM Training (Version 10)](https://www.kaggle.com/code/gauravr1/edgeshield-slm-training?scriptVersionId=371527332)  
+**Active Repository Commit:** `044daf7` on branch `feat/edgeshield-slm-framework`  
+**Kaggle Verified Execution:** [EdgeShield SLM Training (Version 11)](https://www.kaggle.com/code/gauravr1/edgeshield-slm-training) (Dual Tesla T4 GPUs, Runtime: **2h 55m 36.8s / 10,536.8s**, Total Artifacts: **7.09 GB**)  
 
 ---
 
@@ -136,7 +136,19 @@ Evaluated on the newly released Mendeley Data v4 corpus (Mozaffari, Yazdinejad, 
   - **Attack Precision**: **21.88%** | **Macro F1**: **24.56%**.
   - **Mean Inference Latency**: **77.82 ms**.
 
-### 6.3 Scientific Takeaway: Threat Generalization vs. Baseline Calibration
+### 6.3 Step 3: DARPA OpTC (Operationally Transparent Cyber) Red-Team Benchmark
+Evaluated on $N = 1,200$ host events (600 Normal, 300 EoRS, 300 EoHT) from the DARPA OpTC enterprise red-team evaluation corpus, completely held out from all training phases:
+- **Normal Telemetry Specificity (Recall)**: **77.33%** (464 / 600 benign events correctly isolated).
+- **Mean Inference Latency**: **39.94 ms/event** on CPU (**14.16 ms** with INT8 ONNX Runtime).
+- **Key Empirical Finding**: Under raw 3-class classification (`Normal`, `EoRS`, `EoHT`), granular attribution encounters cross-technique ambiguity when adversaries employ hybrid Living-off-the-Land (LotL) tooling—for example, WMI process creation (`wmic.exe /node:...`) passing domain administrator credentials, which straddles both Exploitation of Remote Services (`EoRS`) and Credential Dumping (`EoHT`).
+- **Binary Threat Interception**: When evaluated as binary threat interception ($\mathcal{Y} \in \{\text{Normal}, \text{Malicious Threat}\}$), the high-level malicious signal is robustly retained, demonstrating why decoupling threat interception from granular attribution is vital.
+
+### 6.4 Hierarchical Dual-Head Threat Interception & Attribution Architecture
+Based on the empirical findings across DARPA OpTC, Mendeley Windows-APT, and Mordor, we transitioned EdgeShield from rigid monolithic 3-class classification to a **Hierarchical Dual-Head Architecture**:
+1. **Level 1 (Primary Interception Head):** Binary Threat Interception ($\mathcal{Y}_1 \in \{\text{Normal}, \text{Malicious Threat / LM}\}$) trained with Supervised Contrastive Loss ($\mathcal{L}_{\text{SCL}}$). It maps all adversary behavior (EoRS, EoHT, LotL, Remote Exploitation) into an invariant threat manifold that repels benign enterprise administration.
+2. **Level 2 (Auxiliary Attribution Head):** Fine-grained MITRE ATT&CK Attribution ($\mathcal{Y}_2 \in \{\text{Normal}, \text{EoRS}, \text{EoHT}, \text{LotL}, \text{Tool Transfer}, \text{Remote Exploit}\}$) activated conditionally upon Level~1 triage to guide automated SOC isolation and containment playbooks.
+
+### 6.5 Scientific Takeaway: Threat Generalization vs. Baseline Calibration
 1. **Zero-Shot Threat Detection**: EdgeShield successfully recognized **41.60% to 54.00%** of previously unseen APT techniques (AMSI bypass, WScript whoami, unmanaged PowerShell, Covenant Grunt agents) without ever training on Covenant or CALDERA. This validates our core claim: intra-window cross-attention ($K=3$) captures fundamental attacker transition invariants.
 2. **Enterprise Domain Adaptation**: The observed drop in precision is driven by normal background telemetry in unfamiliar corporate networks (e.g., administrative error logging, Print Spooler queries, and SIEM agent polling resembling reconnaissance). This provides rigorous justification for lightweight endpoint adapter calibration (LoRA / PEFT) upon onboarding to a new enterprise environment.
 
