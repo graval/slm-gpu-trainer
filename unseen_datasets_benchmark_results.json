@@ -1,0 +1,94 @@
+[
+  {
+    "dataset": "Windows-APT Dec-22 (LotL & AMSI Bypass)",
+    "backend": "ONNX INT8",
+    "samples": 1000,
+    "accuracy": 58.8,
+    "threat_recall": 58.8,
+    "precision": 100.0,
+    "macro_f1": 74.06,
+    "fpr": 0.0,
+    "mean_latency_ms": 76.56,
+    "p95_latency_ms": 83.99,
+    "throughput_fps": 13.0,
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        412,
+        588
+      ]
+    ]
+  },
+  {
+    "dataset": "Windows-APT Nov-30 (Tool Transfer & PowerShell)",
+    "backend": "ONNX INT8",
+    "samples": 1000,
+    "accuracy": 48.6,
+    "threat_recall": 48.6,
+    "precision": 100.0,
+    "macro_f1": 65.41,
+    "fpr": 0.0,
+    "mean_latency_ms": 68.66,
+    "p95_latency_ms": 74.89,
+    "throughput_fps": 14.5,
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        514,
+        486
+      ]
+    ]
+  },
+  {
+    "dataset": "The Mordor Project (Covenant WinRM)",
+    "backend": "ONNX INT8",
+    "samples": 1000,
+    "accuracy": 69.6,
+    "threat_recall": 69.6,
+    "precision": 100.0,
+    "macro_f1": 82.08,
+    "fpr": 0.0,
+    "mean_latency_ms": 78.64,
+    "p95_latency_ms": 86.26,
+    "throughput_fps": 12.6,
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        304,
+        696
+      ]
+    ]
+  },
+  {
+    "dataset": "The Mordor Project (Covenant WMI)",
+    "backend": "ONNX INT8",
+    "samples": 1000,
+    "accuracy": 79.0,
+    "threat_recall": 79.0,
+    "precision": 100.0,
+    "macro_f1": 88.27,
+    "fpr": 0.0,
+    "mean_latency_ms": 77.29,
+    "p95_latency_ms": 82.52,
+    "throughput_fps": 12.8,
+    "confusion_matrix": [
+      [
+        0,
+        0
+      ],
+      [
+        210,
+        790
+      ]
+    ]
+  }
+]
