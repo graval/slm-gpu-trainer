@@ -136,7 +136,7 @@ Local edge inference was evaluated on an Intel Core Ultra 7 255H workstation equ
 \section{Empirical Evaluation Results}
 
 \subsection{Held-Out Stream Performance}
-Table~\ref{tab:lsa_perf} summarizes the evaluation metrics on an identically balanced held-out test split of $N = 3,000$ samples (1,000 Class 0, 1,000 Class 1, 1,000 Class 2) following end-to-end cloud training on Dual Tesla T4 GPUs (total runtime: 2~h 55~m 36.8~s / 10,536.8~s).
+Table~\ref{tab:lsa_perf} summarizes the evaluation metrics on an identically balanced held-out test split of $N = 3,000$ samples (1,000 Class 0, 1,000 Class 1, 1,000 Class 2) following end-to-end cloud training on Dual Tesla T4 GPUs (total runtime: 3~h 07~m 08~s / 11,228.0~s).
 
 \begin{table}[htbp]
 \caption{Empirical Performance on Held-Out Test Split (3,000 Balanced Samples)}
@@ -153,10 +153,10 @@ F1-Score  & 99.65\% & 99.70\% & 99.65\%  & \textbf{99.55\%} \\
 \multicolumn{4}{l}{\textbf{Overall Accuracy:}} & \textbf{99.60\%} \\
 \multicolumn{4}{l}{\textbf{Lateral Movement Recall:}} & \textbf{99.90\%} \\
 \multicolumn{4}{l}{\textbf{False Positive Rate (FPR):}} & \textbf{0.40\%} \\
-\multicolumn{4}{l}{\textbf{Stream A Avg Latency (CPU / INT8 ONNX):}} & \textbf{14.16 ms} \\
+\multicolumn{4}{l}{\textbf{Stream A Avg Latency (CPU / INT8 ONNX):}} & \textbf{13.22 ms} \\
 \multicolumn{4}{l}{\textbf{Stream B (BPD) Accuracy / F1:}} & \textbf{100.00\% / 100.00\%} \\
-\multicolumn{4}{l}{\textbf{Stream B Avg Latency:}} & \textbf{5.33 ms} \\
-\multicolumn{4}{l}{\textbf{Dual T4 Training Duration:}} & \textbf{2h 55m 36.8s (10,536.8s)} \\
+\multicolumn{4}{l}{\textbf{Stream B Avg Latency:}} & \textbf{5.34 ms} \\
+\multicolumn{4}{l}{\textbf{Dual T4 Training Duration:}} & \textbf{3h 07m 08s (11,228.0s)} \\
 \bottomrule
 \end{tabular}
 \end{table}

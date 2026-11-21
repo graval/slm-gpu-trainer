@@ -5,8 +5,8 @@
 **Supervisor:** Dr. Tejaskumar Bhatt  
 **Institution:** Faculty of Computer Applications & Information Technology, GLS University, Ahmedabad, India  
 **Date of Audit:** November 20, 2026  
-**Active Repository Commit:** `044daf7` on branch `feat/edgeshield-slm-framework`  
-**Kaggle Verified Execution:** [EdgeShield SLM Training (Version 11)](https://www.kaggle.com/code/gauravr1/edgeshield-slm-training) (Dual Tesla T4 GPUs, Runtime: **2h 55m 36.8s / 10,536.8s**, Total Artifacts: **7.09 GB**)  
+**Active Repository Commit:** `daa940c` on branch `feat/edgeshield-slm-framework`  
+**Kaggle Verified Execution:** [EdgeShield SLM Training (Version 12)](https://www.kaggle.com/code/gauravr1/edgeshield-slm-training?scriptVersionId=372090265) (Dual Tesla T4 GPUs, Runtime: **3h 07m 08s / 11,228.0s**, Total Artifacts: **7.09 GB / 285 files**)  
 
 ---
 
