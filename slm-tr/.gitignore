@@ -45,6 +45,8 @@ data/*.json
 !data/multi_stage_scenarios.json
 !data/covenant_*.json
 data/*.csv
+!data/optc_test_benchmark.csv
+!data/ransomware_behavioral_traces.csv
 external/*.csv
 models/
 
