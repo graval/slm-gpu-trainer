@@ -1,0 +1,17 @@
+{
+  "total_events": 1200,
+  "fast_path_dismissed": 43,
+  "deep_slm_forwarded": 1157,
+  "gating_ratio_percent": 3.58,
+  "attacks_evaluated": 600,
+  "attacks_routed_to_slm": 600,
+  "attacks_missed_by_gate": 0,
+  "attack_retention_rate": 100.0,
+  "fast_path_avg_us": 110.41,
+  "deep_slm_avg_ms": 115.35,
+  "effective_latency_per_event_ms": 111.218,
+  "sustained_throughput_eps": 9.0,
+  "ungated_throughput_eps": 8.7,
+  "throughput_speedup": 1.04,
+  "cpu_savings_percent": 3.58
+}

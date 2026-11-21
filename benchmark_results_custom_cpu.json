@@ -1,0 +1,14 @@
+{
+  "timestamp": 1795264177.3332715,
+  "framework": "EdgeShield Dual-Stream SLM Architecture",
+  "dataset": "DARPA_OPTC",
+  "evaluation_mode": "HIERARCHICAL_LEVEL_1",
+  "backend": "ONNX_INT8",
+  "samples_evaluated": 1200,
+  "metrics": {
+    "accuracy": 48.42,
+    "mean_latency_ms": 99.94,
+    "p95_latency_ms": 112.84,
+    "throughput_fps": 10.0
+  }
+}
